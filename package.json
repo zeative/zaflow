@@ -1,6 +1,6 @@
 {
   "name": "zaflow",
-  "description": "Zaflow",
+  "description": "ZaFlow - Lightweight AI Flow Orchestration Library",
   "version": "1.0.0",
   "license": "MIT",
   "main": "dist/index.js",
@@ -24,12 +24,23 @@
     "r:minor": "npm run build && npm version minor && npm publish",
     "r:major": "npm run build && npm version major && npm publish"
   },
+  "keywords": [
+    "ai",
+    "flow",
+    "orchestration",
+    "llm",
+    "agent",
+    "automation"
+  ],
   "devDependencies": {
+    "@types/node": "^25.0.0",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
-  "dependencies": {},
+  "dependencies": {
+    "zod": "^4.1.13"
+  },
   "packageManager": "pnpm@10.24.0",
   "engines": {
     "node": ">=20.0.0"
