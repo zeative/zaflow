@@ -1,7 +1,7 @@
 {
   "name": "zaflow",
   "description": "ZaFlow - Lightweight AI Flow Orchestration Library",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
