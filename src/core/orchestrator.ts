@@ -57,7 +57,7 @@ export class Orchestrator {
   private stepBuilder = new StepBuilder();
   private toolIndex = new Map<string, Set<string>>();
   private maxToolsPerPrompt = 5;
-  private llmSelectThreshold = 30;
+  private llmSelectThreshold = 10;
 
   constructor(provider: ProviderInterface) {
     this.provider = provider;
@@ -233,11 +233,21 @@ export class Orchestrator {
     options.onAgentEvent?.(e);
   }
 
-  async execute(input: string | Message[], options: ExecutionOptions = {}): Promise<ExecutionResult> {
+  async execute<T = unknown>(input: string | Message[], options: ExecutionOptions = {}): Promise<ExecutionResult<T>> {
     const start = Date.now();
     const mode = options.mode ?? 'agentic';
     const context = new ExecutionContext(input, this.provider, this.tools);
     const events: AgentEvent[] = [];
+
+    if (options.schema) {
+      const schemaJson = z.toJSONSchema(options.schema);
+      const schemaStr = JSON.stringify(schemaJson, null, 2);
+      context.messages.push({
+        role: 'system',
+        content: `IMPORTANT: You MUST respond with valid JSON that matches this schema:\n${schemaStr}\n\nRespond ONLY with the JSON object, no markdown, no explanation.`,
+      });
+    }
+
     if (typeof input === 'string') context.addMessage('user', input);
     else for (const m of input) context.messages.push(m);
     const steps: StepResult[] = [];
@@ -247,10 +257,23 @@ export class Orchestrator {
 
     const { thinking, output } = this.parseThinking(context.previous as string);
     const cleanOutput = this.extractTextFromJSON(output);
-    const formattedOutput = formatOutput(cleanOutput, options.format);
+    const formattedOutput = options.schema ? cleanOutput : formatOutput(cleanOutput, options.format);
     const stats = this.calculateStats(events, context.tokens, context.cost);
+
+    let parsed: T | undefined;
+    if (options.schema) {
+      try {
+        const jsonStr = this.extractJSON(formattedOutput);
+        const jsonData = JSON.parse(jsonStr);
+        parsed = options.schema.parse(jsonData) as T;
+      } catch {
+        parsed = undefined;
+      }
+    }
+
     return {
       output: formattedOutput,
+      parsed,
       thinking,
       messages: context.messages,
       steps,
@@ -258,6 +281,23 @@ export class Orchestrator {
       stats,
       duration: Date.now() - start,
     };
+  }
+
+  private extractJSON(text: string): string {
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) return jsonMatch[1].trim();
+    let depth = 0,
+      start = -1;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '{') {
+        if (depth === 0) start = i;
+        depth++;
+      } else if (text[i] === '}') {
+        depth--;
+        if (depth === 0 && start !== -1) return text.slice(start, i + 1);
+      }
+    }
+    return text;
   }
 
   private calculateStats(events: AgentEvent[], tokens: number, cost: number): ExecutionStats {

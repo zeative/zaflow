@@ -59,7 +59,10 @@ export class ZaFlow {
     this.orchestrator.getStepBuilder().parallel(steps);
     return this;
   }
-  async run(input: string | Message[], options: ExecutionOptions = {}): Promise<ExecutionResult> {
+  async run<TSchema extends import('zod').ZodType = import('zod').ZodType>(
+    input: string | Message[],
+    options: ExecutionOptions<TSchema> = {},
+  ): Promise<ExecutionResult<TSchema extends import('zod').ZodType<infer T> ? T : unknown>> {
     return this.orchestrator.execute(input, options);
   }
   get prompts() {

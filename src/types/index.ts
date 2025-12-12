@@ -107,7 +107,7 @@ export type AgentEvent = {
 
 export type OutputFormat = 'auto' | 'json' | 'whatsapp';
 
-export type ExecutionOptions = {
+export type ExecutionOptions<TSchema extends import('zod').ZodType = import('zod').ZodType> = {
   mode?: ExecutionMode;
   format?: OutputFormat;
   stream?: boolean;
@@ -118,6 +118,7 @@ export type ExecutionOptions = {
   maxTokens?: number;
   timeout?: number;
   signal?: AbortSignal;
+  schema?: TSchema;
 };
 
 export type ExecutionStats = {
@@ -129,14 +130,19 @@ export type ExecutionStats = {
   cost: number;
 };
 
-export type ExecutionResult = {
+export type ExecutionResult<T = unknown> = {
   output: string;
+  parsed?: T;
   thinking?: string;
   messages: Message[];
   steps: StepResult[];
   events: AgentEvent[];
   stats: ExecutionStats;
   duration: number;
+};
+
+export type StructuredResult<T> = ExecutionResult<T> & {
+  parsed: T;
 };
 
 export type StepResult = {

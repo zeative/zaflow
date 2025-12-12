@@ -38,6 +38,7 @@
 [🤖 Agents](#-agents) &nbsp;&nbsp;•&nbsp;&nbsp;
 [🔄 Flow Control](#-flow-control) &nbsp;&nbsp;•&nbsp;&nbsp;
 [📷 Multimodal](#-multimodal-support) &nbsp;&nbsp;•&nbsp;&nbsp;
+[🎯 Structured Output](#-structured-output) &nbsp;&nbsp;•&nbsp;&nbsp;
 [🤝 Contributing](#-contributing)
 
 <br>
@@ -66,6 +67,7 @@ Targeting **Node.js** and **TypeScript** developers, ZaFlow integrates essential
 - 📷 **Multimodal** - Image, audio, file support with smart media reference system
 - 📝 **Output Format** - Auto, JSON, WhatsApp formatting
 - 🔄 **Agent Delegation** - Autonomous agent-to-agent communication
+- 🧩 **Structured Output** - Type-safe responses with Zod schema validation
 
 ## 🎨 Concepts & Architecture
 
@@ -500,6 +502,56 @@ const result = await zaflow.run(input, { format: 'json' });
 // WhatsApp - convert markdown to WhatsApp format
 const result = await zaflow.run(input, { format: 'whatsapp' });
 ```
+
+## 🎯 Structured Output
+
+Force AI to respond in a specific JSON structure with **Zod schema validation**:
+
+```typescript
+import { ZaFlow, groq } from 'zaflow';
+import { z } from 'zod';
+
+const zaflow = new ZaFlow({
+  provider: groq({ apiKey: 'xxx' }),
+});
+
+// Define your expected response schema
+const personSchema = z.object({
+  name: z.string(),
+  age: z.number(),
+  occupation: z.string(),
+  skills: z.array(z.string()),
+});
+
+const result = await zaflow.run('Extract info: John Doe is a 28 year old software engineer skilled in TypeScript and React', { schema: personSchema });
+
+// result.output  → raw JSON string
+// result.parsed  → typed & validated object!
+console.log(result.parsed?.name); // "John Doe" (string)
+console.log(result.parsed?.age); // 28 (number)
+console.log(result.parsed?.skills); // ["TypeScript", "React"]
+```
+
+### Complex Schema Example
+
+```typescript
+const articleSchema = z.object({
+  title: z.string(),
+  summary: z.string().max(200),
+  tags: z.array(z.string()).min(1).max(5),
+  sentiment: z.enum(['positive', 'negative', 'neutral']),
+  metadata: z.object({
+    wordCount: z.number(),
+    readingTime: z.string(),
+  }),
+});
+
+const result = await zaflow.run('Analyze this article: ...', {
+  schema: articleSchema,
+});
+```
+
+> **Note:** If the AI response doesn't match the schema, `result.parsed` will be `undefined`. Always check before using.
 
 ## 🧠 ExecutionContext API
 
