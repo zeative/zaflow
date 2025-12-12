@@ -174,7 +174,7 @@ export class Orchestrator {
     else await this.executeMode(mode, context, steps, options, events);
 
     const { thinking, output } = this.parseThinking(context.previous as string);
-    const formattedOutput = formatOutput(output, options.outputFormat);
+    const formattedOutput = formatOutput(output, options.format);
     const stats = this.calculateStats(events, context.tokens, context.cost);
     return {
       output: formattedOutput,

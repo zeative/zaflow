@@ -107,7 +107,7 @@ export type OutputFormat = 'auto' | 'json' | 'whatsapp';
 
 export type ExecutionOptions = {
   mode?: ExecutionMode;
-  outputFormat?: OutputFormat;
+  format?: OutputFormat;
   stream?: boolean;
   onChunk?: (chunk: { content: string; done: boolean }) => void;
   onAgentEvent?: (event: AgentEvent) => void;
