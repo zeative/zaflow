@@ -216,6 +216,24 @@ const customAI = createProvider({
 const zaflow = new ZaFlow({ provider: customAI });
 ```
 
+> ⚠️ **AI Model Quality Affects Tool Calling & Agent Delegation**
+>
+> The quality of your AI model significantly impacts whether tool calls and agent delegations work correctly. When using **Custom Provider** with external APIs:
+>
+> - **Low-quality models** may ignore tool instructions and respond directly instead of returning the required JSON format `{"tool": "...", "params": {...}}`
+> - **Inconsistent behavior** - The same prompt may sometimes trigger tools and sometimes not
+> - **Empty responses** - Some APIs may return empty responses causing execution errors
+>
+> **Recommendations:**
+>
+> | Use Case             | Recommended Models                                     |
+> | -------------------- | ------------------------------------------------------ |
+> | **Tool Calling**     | GPT-4, GPT-4o, Claude 3, Llama 3.1 70B+, Qwen 2.5 72B+ |
+> | **Agent Delegation** | GPT-4o, Claude 3 Opus, Llama 3.3 70B                   |
+> | **Simple Chat**      | Any model works fine                                   |
+>
+> For best results with tool calling and agent features, use built-in providers (`openai`, `groq`, `ollama`) with high-quality models that have native function calling support.
+
 ## 🎯 Execution Modes
 
 > **Quick Jump:** [Single](#single-mode) · [Agentic](#agentic-mode) · [Autonomous](#autonomous-mode)
