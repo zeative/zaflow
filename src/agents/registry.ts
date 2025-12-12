@@ -1,4 +1,5 @@
-import type { AgentDefinition, Message, ProviderOptions, ProviderResponse } from '../types';
+import type { AgentDefinition, MediaType, Message, ProviderOptions, ProviderResponse } from '../types';
+import { stripMediaFromMessages, resolveMediaInMessages } from '../helpers';
 
 class AgentRegistry {
   private agents = new Map<string, AgentDefinition>();
@@ -12,6 +13,7 @@ class AgentRegistry {
   registerMany(agents: AgentDefinition[]): void {
     agents.forEach((a) => this.register(a));
   }
+
   get(idOrName: string): AgentDefinition | undefined {
     return this.agents.get(idOrName);
   }
@@ -24,6 +26,7 @@ class AgentRegistry {
   updateSummary(agent: AgentDefinition, summary: string): void {
     this.summaries.set(agent.id, summary);
   }
+
   getSummary(agent: AgentDefinition): string {
     return this.summaries.get(agent.id) ?? '';
   }
@@ -33,6 +36,14 @@ class AgentRegistry {
     if (agent.prompt) msgs.push({ role: 'system', content: agent.prompt });
     if (callerSummary) msgs.push({ role: 'system', content: `Context:\n${callerSummary}` });
     msgs.push({ role: 'user', content: input });
+    const opts: ProviderOptions = { model: agent.model, temperature: agent.temperature, maxTokens: agent.maxTokens, tools: agent.tools };
+    return agent.provider.chat(msgs, opts);
+  }
+
+  async callAgentWithMessages(agent: AgentDefinition, messages: Message[]): Promise<ProviderResponse> {
+    const needsMedia = agent.needsMedia ?? [];
+    const processed = needsMedia.length > 0 ? resolveMediaInMessages(messages) : stripMediaFromMessages(messages);
+    const msgs: Message[] = agent.prompt ? [{ role: 'system', content: agent.prompt }, ...processed] : processed;
     const opts: ProviderOptions = { model: agent.model, temperature: agent.temperature, maxTokens: agent.maxTokens, tools: agent.tools };
     return agent.provider.chat(msgs, opts);
   }

@@ -89,6 +89,7 @@ export type AgentConfig = {
   temperature?: number;
   maxTokens?: number;
   shareContext?: string[];
+  needsMedia?: MediaType[];
 };
 
 export type AgentDefinition = AgentConfig & { id: string };

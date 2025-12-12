@@ -18,7 +18,7 @@ import { toolRegistry } from '../tools';
 import { ExecutionContext } from './context';
 import { formatOutput } from './formatter';
 import { StepBuilder, type FlowNode } from './step';
-import { getTextContent, estimateTokens } from '../helpers';
+import { getTextContent, estimateTokens, resolveImageUrl, stripMediaFromMessages } from '../helpers';
 
 const TOOL_PROMPT = `You have access to tools. Use them when needed.
 
@@ -178,8 +178,9 @@ export class Orchestrator {
         const tool = this.tools.find((t) => t.handles?.includes('image'));
         if (tool) {
           try {
-            const url = (part as import('../types').ImagePart).image_url.url;
-            this.emit(events, options, { type: 'tool_call', tool: tool.name, input: { media: url } });
+            const rawUrl = (part as import('../types').ImagePart).image_url.url;
+            const url = resolveImageUrl(rawUrl);
+            this.emit(events, options, { type: 'tool_call', tool: tool.name, input: { media: '[resolved]' } });
             const result = await toolRegistry.execute(tool.name, { media: url }, context);
             const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
             results.push(`[Image Analysis]: ${resultStr}`);
