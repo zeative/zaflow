@@ -58,7 +58,7 @@ Targeting **Node.js** and **TypeScript** developers, ZaFlow integrates essential
 
 ## ✨ Features
 
-- 🪶 **Lightweight** - Bundle size < 30KB, zero bloat
+- 🪶 **Lightweight** - Minimal dependencies, fast startup, no bloat
 - 🔌 **Multi-Provider** - OpenAI, Groq, Ollama, or custom provider
 - 🤖 **3 Execution Modes** - Single, Agentic, Autonomous
 - 🛠️ **Tools & Agents** - Define tools with Zod schema validation
