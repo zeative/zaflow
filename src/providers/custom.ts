@@ -1,13 +1,16 @@
-import type { ContentPart, Message, ProviderInterface, ProviderOptions, ProviderResponse, TextPart, Usage } from '../types';
+import type { ContentPart, Message, ProviderInterface, ProviderOptions, ProviderResponse, TextPart, ToolCall, ToolDefinition, Usage } from '../types';
+import * as z from 'zod';
 
 export type ProviderContext = {
   prompt: string;
   messages: Message[];
   options: ProviderOptions;
+  tools?: ToolDefinition[];
 };
 
 export type ProviderOutput = {
   content: string;
+  toolCalls?: ToolCall[];
   usage?: Usage;
 };
 
@@ -30,31 +33,80 @@ const contentToString = (content: string | ContentPart[]): string => {
     .join(' ');
 };
 
-const buildPrompt = (msgs: Message[]): string =>
-  msgs
+const formatToolSchema = (t: ToolDefinition): string => {
+  const schema = z.toJSONSchema(t.schema) as { properties?: Record<string, { type?: string; description?: string }>; required?: string[] };
+  const params = schema.properties
+    ? Object.entries(schema.properties)
+        .map(([k, v]) => `${k}: ${v.type || 'any'}${schema.required?.includes(k) ? '' : '?'}`)
+        .join(', ')
+    : '';
+  return `- ${t.name}: ${t.description} {${params}}`;
+};
+
+const buildPrompt = (msgs: Message[], tools?: ToolDefinition[]): string => {
+  const base = msgs
     .map((m) => {
       const text = contentToString(m.content);
       if (m.role === 'system') return `[System]: ${text}`;
       if (m.role === 'user') return `[User]: ${text}`;
       if (m.role === 'assistant' && text) return `[Assistant]: ${text}`;
-      if (m.role === 'tool') return `[Tool]: ${text}`;
+      if (m.role === 'tool') return `[Tool Result]: ${text}`;
       return '';
     })
     .filter(Boolean)
     .join('\n\n');
 
+  if (!tools?.length) return base;
+  const toolList = tools.map(formatToolSchema).join('\n');
+  return `${base}\n\n[CRITICAL INSTRUCTION]\nYou MUST use tools when the user explicitly asks. Available tools:\n${toolList}\n\nTo use a tool, respond with ONLY this JSON (no other text):\n{"tool": "tool_name", "params": {...}}\n\nThe user asked to use a tool. You MUST respond with the JSON format above.`;
+};
+
+const parseJSON = (content: string): Record<string, unknown> | null => {
+  let depth = 0,
+    start = -1;
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (content[i] === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        try {
+          return JSON.parse(content.slice(start, i + 1));
+        } catch {}
+        start = -1;
+      }
+    }
+  }
+  return null;
+};
+
+const extractToolCall = (content: string): ToolCall[] | undefined => {
+  const p = parseJSON(content);
+  if (p?.tool && typeof p.tool === 'string') {
+    return [{ id: `call_${Date.now()}`, type: 'function', function: { name: p.tool, arguments: JSON.stringify(p.params || {}) } }];
+  }
+  return undefined;
+};
+
 export function createProvider(config: CustomProviderConfig): ProviderInterface {
   return {
     name: config.name || 'custom',
     async chat(messages: Message[], options: ProviderOptions = {}): Promise<ProviderResponse> {
-      const ctx: ProviderContext = { prompt: buildPrompt(messages), messages, options };
+      const tools = options.tools;
+      const ctx: ProviderContext = { prompt: buildPrompt(messages, tools), messages, options, tools };
       const res = await config.handler(ctx);
       const zero: Usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
       if (typeof res === 'string') {
+        const toolCalls = extractToolCall(res);
+        if (toolCalls) return { content: res, toolCalls, finishReason: 'tool_calls', usage: zero };
         return { content: res, finishReason: 'stop', usage: zero };
       }
 
+      if (res?.toolCalls?.length) return { content: res.content ?? '', toolCalls: res.toolCalls, finishReason: 'tool_calls', usage: res.usage ?? zero };
+      const toolCalls = extractToolCall(res?.content || '');
+      if (toolCalls) return { content: res.content ?? '', toolCalls, finishReason: 'tool_calls', usage: res.usage ?? zero };
       return { content: res?.content ?? '', finishReason: 'stop', usage: res?.usage ?? zero };
     },
   };

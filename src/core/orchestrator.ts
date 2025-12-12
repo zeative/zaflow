@@ -355,6 +355,11 @@ export class Orchestrator {
       if (r.usage) context.tokens += r.usage.totalTokens;
       else context.tokens += estimateTokens(JSON.stringify(context.messages) + (r.content || ''));
 
+      if (!r.content && !r.toolCalls?.length) {
+        context.messages.push({ role: 'system', content: 'Please provide a response or use an available tool.' });
+        continue;
+      }
+
       let calls = r.toolCalls;
       if (!calls?.length && r.content) {
         const p = this.parseJSON(r.content);
@@ -436,6 +441,12 @@ export class Orchestrator {
       const r = await this.provider.chat(context.messages, { tools: selectedTools.length ? selectedTools : undefined });
       if (r.usage && r.usage.totalTokens > 0) context.tokens += r.usage.totalTokens;
       else context.tokens += estimateTokens(JSON.stringify(context.messages) + (r.content || ''));
+
+      if (!r.content && !r.toolCalls?.length) {
+        context.messages.push({ role: 'system', content: 'Please provide a response or use an available tool.' });
+        consecutiveErrors++;
+        continue;
+      }
 
       const parsed = this.parseJSON(r.content || '');
 
