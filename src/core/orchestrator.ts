@@ -18,6 +18,7 @@ import { toolRegistry } from '../tools';
 import { ExecutionContext } from './context';
 import { formatOutput } from './formatter';
 import { StepBuilder, type FlowNode } from './step';
+import { getTextContent } from '../helpers';
 
 const TOOL_PROMPT = `You have access to tools. Use them when needed.
 
@@ -53,7 +54,7 @@ export class Orchestrator {
   private tools: ToolDefinition[] = [];
   private stepBuilder = new StepBuilder();
   private toolIndex = new Map<string, Set<string>>();
-  private maxToolsPerPrompt = 10;
+  private maxToolsPerPrompt = 5;
   private llmSelectThreshold = 30;
 
   constructor(provider: ProviderInterface) {
@@ -252,7 +253,8 @@ export class Orchestrator {
   }
 
   private async executeMode(mode: ExecutionMode, context: ExecutionContext, steps: StepResult[], options: ExecutionOptions, events: AgentEvent[]): Promise<void> {
-    const query = context.messages.filter((m) => m.role === 'user').pop()?.content || '';
+    const lastUserMsg = context.messages.filter((m) => m.role === 'user').pop();
+    const query = lastUserMsg ? getTextContent(lastUserMsg.content) : '';
     if (mode === 'single') {
       const r = await this.provider.chat(context.messages);
       if (r.usage && r.usage.totalTokens > 0) context.tokens += r.usage.totalTokens;
@@ -325,8 +327,8 @@ export class Orchestrator {
       }
     }
 
-    const last = context.messages.filter((m) => m.role === 'assistant' && m.content).pop()?.content;
-    if (last) return last;
+    const lastAssistant = context.messages.filter((m) => m.role === 'assistant' && m.content).pop();
+    if (lastAssistant) return getTextContent(lastAssistant.content);
     const final = await this.provider.chat([...context.messages, { role: 'user', content: 'Provide your final response.' }]);
     if (final.usage && final.usage.totalTokens > 0) context.tokens += final.usage.totalTokens;
     else context.tokens += this.estimateTokens(JSON.stringify(context.messages) + (final.content || ''));
@@ -471,6 +473,7 @@ export class Orchestrator {
       return synthesis.content ?? results.join('\n');
     }
 
-    return context.messages.filter((m) => m.role === 'assistant' && m.content).pop()?.content ?? '';
+    const lastAssistant = context.messages.filter((m) => m.role === 'assistant' && m.content).pop();
+    return lastAssistant ? getTextContent(lastAssistant.content) : '';
   }
 }

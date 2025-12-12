@@ -1,6 +1,12 @@
+export type TextPart = { type: 'text'; text: string };
+export type ImagePart = { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } };
+export type AudioPart = { type: 'audio'; audio: { data: string; format: 'wav' | 'mp3' } };
+export type FilePart = { type: 'file'; file: { data: string; mimeType: string; filename?: string } };
+export type ContentPart = TextPart | ImagePart | AudioPart | FilePart;
+
 export type Message = {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | ContentPart[];
   name?: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];

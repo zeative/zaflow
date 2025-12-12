@@ -1,4 +1,4 @@
-import type { Message, ProviderInterface, ProviderOptions, ProviderResponse, Usage } from '../types';
+import type { ContentPart, Message, ProviderInterface, ProviderOptions, ProviderResponse, TextPart, Usage } from '../types';
 
 export type ProviderContext = {
   prompt: string;
@@ -16,13 +16,28 @@ export type CustomProviderConfig = {
   handler: (ctx: ProviderContext) => Promise<string | ProviderOutput>;
 };
 
+const contentToString = (content: string | ContentPart[]): string => {
+  if (typeof content === 'string') return content;
+  return content
+    .map((p) => {
+      if (p.type === 'text') return (p as TextPart).text;
+      if (p.type === 'image_url') return '[Image]';
+      if (p.type === 'audio') return '[Audio]';
+      if (p.type === 'file') return '[File]';
+      return '';
+    })
+    .filter(Boolean)
+    .join(' ');
+};
+
 const buildPrompt = (msgs: Message[]): string =>
   msgs
     .map((m) => {
-      if (m.role === 'system') return `[System]: ${m.content}`;
-      if (m.role === 'user') return `[User]: ${m.content}`;
-      if (m.role === 'assistant' && m.content) return `[Assistant]: ${m.content}`;
-      if (m.role === 'tool') return `[Tool]: ${m.content}`;
+      const text = contentToString(m.content);
+      if (m.role === 'system') return `[System]: ${text}`;
+      if (m.role === 'user') return `[User]: ${text}`;
+      if (m.role === 'assistant' && text) return `[Assistant]: ${text}`;
+      if (m.role === 'tool') return `[Tool]: ${text}`;
       return '';
     })
     .filter(Boolean)
