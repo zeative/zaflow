@@ -77,12 +77,15 @@ export type ToolConfig = {
 
 export type ToolHandler<T = unknown> = (params: T, context: ExecutionContext) => unknown | Promise<unknown>;
 
+export type MediaType = 'image' | 'audio' | 'file' | 'video';
+
 export type ToolDefinition<T extends import('zod').ZodType = import('zod').ZodType> = {
   name: string;
   description: string;
   schema: T;
   handler: ToolHandler<import('zod').infer<T>>;
   config?: ToolConfig;
+  handles?: MediaType[];
 };
 
 export type AgentConfig = {
@@ -101,10 +104,10 @@ export type AgentDefinition = AgentConfig & { id: string };
 export type ExecutionMode = 'single' | 'agentic' | 'autonomous';
 
 export type AgentEvent = {
-  type: 'delegation' | 'tool_call' | 'agent_response' | 'synthesis';
+  type: 'delegation' | 'tool_call' | 'tool_result' | 'agent_response' | 'synthesis';
   agent?: string;
   tool?: string;
-  input?: string;
+  input?: unknown;
   output?: string;
   timestamp: number;
 };

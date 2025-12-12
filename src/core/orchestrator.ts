@@ -28,7 +28,7 @@ TOOLS:
 To call a tool, respond with JSON: {"tool": "name", "params": {...}}
 After receiving results, provide your final answer.`;
 
-const AUTONOMOUS_PROMPT = `You are an AI assistant with access to agents and tools. ALWAYS consider the conversation history above.
+const AUTONOMOUS_PROMPT = `You are an intelligent AI assistant. ALWAYS remember the full conversation history.
 
 AGENTS:
 {{agents}}
@@ -36,12 +36,20 @@ AGENTS:
 TOOLS:
 {{tools}}
 
-BEHAVIOR:
-- For normal conversation: respond naturally in plain text
-- To delegate work to an agent: {"delegate": "agent_name", "task": "description"}
-- To use a tool: {"tool": "tool_name", "params": {...}}
+CRITICAL RULES:
+1. BE PROACTIVE - automatically detect when a tool or agent is needed
+2. If user mentions [Image], [Audio], [File] - IMMEDIATELY use the appropriate analyzer agent/tool
+3. If user asks to generate/create something - IMMEDIATELY use the appropriate generation agent/tool
+4. If user asks about prompts/prompt engineering - delegate to the agent
+5. NEVER ask user "should I use a tool?" - just DO IT
+6. Remember user's name and all context from conversation history
 
-Only use JSON format when you need to delegate or use tools. For regular chat, respond normally.`;
+ACTIONS:
+- Use tool: {"tool": "tool_name", "params": {...}}
+- Delegate: {"delegate": "agent_name", "task": "..."}
+- Normal reply: just respond in plain text
+
+Be smart and proactive!`;
 
 export class Orchestrator {
   private provider: ProviderInterface;
@@ -158,6 +166,68 @@ export class Orchestrator {
     } catch {
       return text;
     }
+  }
+
+  private async autoProcessMedia(context: ExecutionContext, events: AgentEvent[], options: ExecutionOptions): Promise<string[]> {
+    const results: string[] = [];
+    const lastUserMsg = context.messages.filter((m) => m.role === 'user').pop();
+    console.log('🔍 autoProcessMedia - lastUserMsg:', lastUserMsg?.role, typeof lastUserMsg?.content);
+    if (!lastUserMsg || typeof lastUserMsg.content === 'string') return results;
+
+    console.log('🔍 autoProcessMedia - content parts:', lastUserMsg.content.length);
+    for (const part of lastUserMsg.content) {
+      console.log('🔍 autoProcessMedia - part type:', part.type);
+      if (part.type === 'image_url') {
+        const tool = this.tools.find((t) => t.handles?.includes('image'));
+        console.log('🔍 autoProcessMedia - found tool:', tool?.name);
+        if (tool) {
+          try {
+            const url = (part as import('../types').ImagePart).image_url.url;
+            this.emit(events, options, { type: 'tool_call', tool: tool.name, input: { media: url } });
+            const result = await toolRegistry.execute(tool.name, { media: url }, context);
+            const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+            results.push(`[Image Analysis]: ${resultStr}`);
+            context.messages.push({ role: 'system', content: `Auto-analyzed image: ${resultStr}` });
+            this.emit(events, options, { type: 'tool_result', tool: tool.name, output: resultStr });
+          } catch (e) {
+            results.push(`[Image Analysis Error]: ${e instanceof Error ? e.message : e}`);
+          }
+        }
+      }
+      if (part.type === 'audio') {
+        const tool = this.tools.find((t) => t.handles?.includes('audio'));
+        if (tool) {
+          try {
+            const data = (part as import('../types').AudioPart).audio.data;
+            this.emit(events, options, { type: 'tool_call', tool: tool.name, input: { audio: data } });
+            const result = await toolRegistry.execute(tool.name, { audio: data }, context);
+            const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+            results.push(`[Audio Analysis]: ${resultStr}`);
+            context.messages.push({ role: 'system', content: `Auto-analyzed audio: ${resultStr}` });
+            this.emit(events, options, { type: 'tool_result', tool: tool.name, output: resultStr });
+          } catch (e) {
+            results.push(`[Audio Analysis Error]: ${e instanceof Error ? e.message : e}`);
+          }
+        }
+      }
+      if (part.type === 'file') {
+        const tool = this.tools.find((t) => t.handles?.includes('file'));
+        if (tool) {
+          try {
+            const filePart = part as import('../types').FilePart;
+            this.emit(events, options, { type: 'tool_call', tool: tool.name, input: { file: filePart.file } });
+            const result = await toolRegistry.execute(tool.name, { file: filePart.file }, context);
+            const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+            results.push(`[File Analysis]: ${resultStr}`);
+            context.messages.push({ role: 'system', content: `Auto-analyzed file: ${resultStr}` });
+            this.emit(events, options, { type: 'tool_result', tool: tool.name, output: resultStr });
+          } catch (e) {
+            results.push(`[File Analysis Error]: ${e instanceof Error ? e.message : e}`);
+          }
+        }
+      }
+    }
+    return results;
   }
 
   private emit(events: AgentEvent[], options: ExecutionOptions, event: Omit<AgentEvent, 'timestamp'>): void {
@@ -346,6 +416,9 @@ export class Orchestrator {
     const agents = agentRegistry.getAll();
     const selectedTools = await this.selectTools(query);
     const results: string[] = [];
+
+    const mediaResults = await this.autoProcessMedia(context, events, options);
+    if (mediaResults.length) results.push(...mediaResults);
 
     const agentDesc = agents.length ? agents.map((a) => `- ${a.name}: ${a.prompt?.slice(0, 80) || 'General purpose agent'}`).join('\n') : 'No agents available';
     const toolDesc = selectedTools.length ? selectedTools.map((t) => this.formatToolSchema(t)).join('\n') : 'No tools available';
