@@ -239,6 +239,10 @@ export class Orchestrator {
     const context = new ExecutionContext(input, this.provider, this.tools);
     const events: AgentEvent[] = [];
 
+    if (options.systemPrompt) {
+      context.messages.push({ role: 'system', content: options.systemPrompt });
+    }
+
     if (options.schema) {
       const schemaJson = z.toJSONSchema(options.schema);
       const schemaStr = JSON.stringify(schemaJson, null, 2);

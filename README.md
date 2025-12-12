@@ -593,16 +593,34 @@ const result = await zaflow.run(input, {
   mode: 'autonomous',
   format: 'whatsapp',
   maxIterations: 10,
-  maxToolCalls: 20,
+  maxToolCalls: 3,
   maxTokens: 4096,
   timeout: 30000,
   signal: abortController.signal,
+  schema: responseSchema,
+  systemPrompt: 'You are a helpful assistant.',
 
   onAgentEvent: (event) => {
     console.log(`[${event.type}] ${event.agent || event.tool}`);
   },
 });
 ```
+
+### AI Personalization with `systemPrompt`
+
+Customize AI behavior without affecting library's internal prompts:
+
+```typescript
+const result = await zaflow.run('Halo!', {
+  systemPrompt: `Kamu adalah JawiBot, asisten AI berbahasa Jawa.
+Jawab semua pertanyaan dalam bahasa Jawa yang sopan.
+Gunakan emoji sesekali untuk membuat percakapan lebih hidup.`,
+});
+
+// Output: "Sugeng enjing! Aku JawiBot, asisten AI sing siap mbantu sampeyan! 😊"
+```
+
+> **Note:** `systemPrompt` is injected **before** library's internal prompts (tools, agents), ensuring your personalization takes priority.
 
 ## 📊 Execution Result
 

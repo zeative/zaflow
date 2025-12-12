@@ -119,6 +119,7 @@ export type ExecutionOptions<TSchema extends import('zod').ZodType = import('zod
   timeout?: number;
   signal?: AbortSignal;
   schema?: TSchema;
+  systemPrompt?: string;
 };
 
 export type ExecutionStats = {
