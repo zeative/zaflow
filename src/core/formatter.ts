@@ -38,5 +38,5 @@ const formatters: Record<OutputFormat, (text: string) => string> = {
 
 export const formatOutput = (text: string, format: OutputFormat = 'auto'): string => {
   if (!text) return text;
-  return formatters[format](text);
+  return formatters[format](text)?.trim();
 };

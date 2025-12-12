@@ -27,29 +27,26 @@ TOOLS:
 To call a tool, respond with JSON: {"tool": "name", "params": {...}}
 After receiving results, provide your final answer.`;
 
-const AUTONOMOUS_PROMPT = `You are an autonomous orchestrator that MUST coordinate AI agents effectively.
+const AUTONOMOUS_PROMPT = `You are an autonomous AI orchestrator. You MUST respond with JSON commands ONLY - never talk to the user directly.
 
-AVAILABLE AGENTS (PREFER THESE for specialized tasks):
+AGENTS:
 {{agents}}
 
-AVAILABLE TOOLS (use directly only if no agent applies):
+TOOLS:
 {{tools}}
 
-WORKFLOW:
-1. FIRST check if any agent is suited for the task or subtask
-2. If an agent matches, DELEGATE to them.
-3. Only use tools directly if no agent is appropriate.
-4. After getting agent/tool results, synthesize the final response.
+RULES:
+1. IMMEDIATELY delegate to an agent if one matches the task
+2. Use tools only if no agent applies
+3. NEVER ask the user questions
+4. NEVER explain your process
+5. Your response MUST be valid JSON
 
-ACTIONS (Respond with JSON for tools/delegation):
-- To DELEGATE: {"delegate": "agent_name", "task": "specific task description"}
-- To USE TOOL: {"tool": "tool_name", "params": {"arg": "value"}}
+RESPONSE FORMAT (pick one):
+{"delegate": "agent_name", "task": "task description"}
+{"tool": "tool_name", "params": {...}}
 
-IMPORTANT:
-- Do NOT skip agents and go directly to tools if an agent can help.
-- Ensure "params" matches the tool schema exactly.
-
-For the FINAL ANSWER, provide just the plain text response. DO NOT wrap it in JSON.`;
+Respond with JSON now.`;
 
 export class Orchestrator {
   private provider: ProviderInterface;
@@ -370,24 +367,25 @@ export class Orchestrator {
       const parsed = this.parseJSON(r.content || '');
 
       if (parsed?.delegate && typeof parsed.delegate === 'string') {
-        const agent = agentRegistry.get(parsed.delegate);
+        let agent = agentRegistry.get(parsed.delegate);
+        if (!agent) {
+          const agents = agentRegistry.getAll();
+          agent = agents.find((a) => a.name.toLowerCase().includes((parsed.delegate as string).toLowerCase())) || agents[0];
+        }
         if (agent) {
-          this.emit(events, options, { type: 'delegation', agent: agent.name, input: (parsed.task as string) || query });
-          const agentResult = await agentRegistry.callAgent(agent, (parsed.task as string) || query);
+          this.emit(events, options, { type: 'delegation', agent: agent.name, input: query });
+          const agentResult = await agentRegistry.callAgent(agent, query);
 
           if (agentResult.usage) {
             context.tokens += agentResult.usage.totalTokens;
           } else {
-            const agentInput = (agent.prompt || '') + ((parsed.task as string) || query);
+            const agentInput = (agent.prompt || '') + query;
             context.tokens += this.estimateTokens(agentInput + (agentResult.content || ''));
           }
 
           this.emit(events, options, { type: 'agent_response', agent: agent.name, output: agentResult.content ?? '' });
-          results.push(`[${agent.name}]: ${agentResult.content}`);
-          context.messages.push({ role: 'assistant', content: `Delegated to ${agent.name}` });
-          context.messages.push({ role: 'system', content: `Agent ${agent.name} responded: ${agentResult.content}` });
-          consecutiveErrors = 0;
-          continue;
+          context.messages.push({ role: 'assistant', content: agentResult.content || '' });
+          return agentResult.content || '';
         }
       }
 

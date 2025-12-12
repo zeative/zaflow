@@ -29,6 +29,7 @@ class AgentRegistry {
   }
 
   async callAgent(agent: AgentDefinition, input: string, callerSummary?: string): Promise<ProviderResponse> {
+    console.log('🔍 ~ callAgent ~ src/agents/registry.ts:31 ~ input:', input);
     const msgs: Message[] = [];
     if (agent.prompt) msgs.push({ role: 'system', content: agent.prompt });
     if (callerSummary) msgs.push({ role: 'system', content: `Context:\n${callerSummary}` });
