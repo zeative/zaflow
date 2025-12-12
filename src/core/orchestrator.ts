@@ -28,7 +28,7 @@ TOOLS:
 To call a tool, respond with JSON: {"tool": "name", "params": {...}}
 After receiving results, provide your final answer.`;
 
-const AUTONOMOUS_PROMPT = `You are an autonomous AI orchestrator. You MUST respond with JSON commands ONLY - never talk to the user directly.
+const AUTONOMOUS_PROMPT = `You are an AI assistant with access to agents and tools. ALWAYS consider the conversation history above.
 
 AGENTS:
 {{agents}}
@@ -36,18 +36,12 @@ AGENTS:
 TOOLS:
 {{tools}}
 
-RULES:
-1. IMMEDIATELY delegate to an agent if one matches the task
-2. Use tools only if no agent applies
-3. NEVER ask the user questions
-4. NEVER explain your process
-5. Your response MUST be valid JSON
+BEHAVIOR:
+- For normal conversation: respond naturally in plain text
+- To delegate work to an agent: {"delegate": "agent_name", "task": "description"}
+- To use a tool: {"tool": "tool_name", "params": {...}}
 
-RESPONSE FORMAT (pick one):
-{"delegate": "agent_name", "task": "task description"}
-{"tool": "tool_name", "params": {...}}
-
-Respond with JSON now.`;
+Only use JSON format when you need to delegate or use tools. For regular chat, respond normally.`;
 
 export class Orchestrator {
   private provider: ProviderInterface;
@@ -156,6 +150,16 @@ export class Orchestrator {
     return { thinking, output };
   }
 
+  private extractTextFromJSON(text: string): string {
+    if (!text.trim().startsWith('{')) return text;
+    try {
+      const p = JSON.parse(text);
+      return p?.response || p?.content || p?.message || p?.answer || p?.text || p?.result || text;
+    } catch {
+      return text;
+    }
+  }
+
   private emit(events: AgentEvent[], options: ExecutionOptions, event: Omit<AgentEvent, 'timestamp'>): void {
     const e: AgentEvent = { ...event, timestamp: Date.now() };
     events.push(e);
@@ -175,7 +179,8 @@ export class Orchestrator {
     else await this.executeMode(mode, context, steps, options, events);
 
     const { thinking, output } = this.parseThinking(context.previous as string);
-    const formattedOutput = formatOutput(output, options.format);
+    const cleanOutput = this.extractTextFromJSON(output);
+    const formattedOutput = formatOutput(cleanOutput, options.format);
     const stats = this.calculateStats(events, context.tokens, context.cost);
     return {
       output: formattedOutput,
