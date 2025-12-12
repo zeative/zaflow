@@ -71,7 +71,7 @@ export class ZaFlow {
 }
 
 export { agentRegistry, defineAgent } from './agents';
-export { ExecutionContext } from './core';
+export { ExecutionContext, formatOutput } from './core';
 export { prompts } from './prompts';
 export { createProvider, GroqProvider, OllamaProvider, OpenAIProvider } from './providers';
 export { groq, ollama, openai } from './providers/factory';

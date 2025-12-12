@@ -16,6 +16,7 @@ import * as z from 'zod';
 import { agentRegistry } from '../agents';
 import { toolRegistry } from '../tools';
 import { ExecutionContext } from './context';
+import { formatOutput } from './formatter';
 import { StepBuilder, type FlowNode } from './step';
 
 const TOOL_PROMPT = `You have access to tools. Use them when needed.
@@ -176,9 +177,10 @@ export class Orchestrator {
     else await this.executeMode(mode, context, steps, options, events);
 
     const { thinking, output } = this.parseThinking(context.previous as string);
+    const formattedOutput = formatOutput(output, options.outputFormat);
     const stats = this.calculateStats(events, context.tokens, context.cost);
     return {
-      output,
+      output: formattedOutput,
       thinking,
       messages: context.messages,
       steps,

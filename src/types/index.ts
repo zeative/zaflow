@@ -103,8 +103,11 @@ export type AgentEvent = {
   timestamp: number;
 };
 
+export type OutputFormat = 'auto' | 'json' | 'whatsapp';
+
 export type ExecutionOptions = {
   mode?: ExecutionMode;
+  outputFormat?: OutputFormat;
   stream?: boolean;
   onChunk?: (chunk: { content: string; done: boolean }) => void;
   onAgentEvent?: (event: AgentEvent) => void;
