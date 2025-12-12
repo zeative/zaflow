@@ -1,6 +1,4 @@
-export { BaseProvider } from './base';
-export { OpenAIProvider } from './openai';
-export { GroqProvider } from './groq';
-export { OllamaProvider } from './ollama';
 export { createProvider } from './custom';
 export type { CustomProviderConfig, ProviderContext, ProviderOutput } from './custom';
+export { openai, groq, ollama } from './factory';
+export type { OpenAIConfig, GroqConfig, OllamaConfig, OpenAIModel, GroqModel, OllamaModel } from './factory';

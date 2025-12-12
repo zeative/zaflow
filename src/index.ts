@@ -74,7 +74,7 @@ export { agentRegistry, defineAgent } from './agents';
 export { ExecutionContext, formatOutput } from './core';
 export { image, imageBase64, msg, text } from './helpers';
 export { prompts } from './prompts';
-export { createProvider, GroqProvider, OllamaProvider, OpenAIProvider } from './providers';
+export { createProvider } from './providers';
 export { groq, ollama, openai } from './providers/factory';
 export { defineTool, toolRegistry } from './tools';
 export type * from './types';

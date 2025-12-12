@@ -56,14 +56,6 @@ export type ProviderConfig = {
   defaultOptions?: Partial<ProviderOptions>;
 };
 
-export type CustomProviderConfig = {
-  name: string;
-  endpoint: string;
-  headers?: Record<string, string>;
-  mapRequest: (messages: Message[], options: ProviderOptions) => unknown;
-  mapResponse: (response: unknown) => ProviderResponse;
-};
-
 export type ToolConfig = {
   timeout?: number;
   cacheable?: boolean;

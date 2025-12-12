@@ -1,4 +1,5 @@
 import { toolRegistry } from '../tools';
+import { estimateTokens } from '../helpers';
 import type { AIOptions, ExecutionContext as IExecutionContext, Message, ProviderInterface, ToolDefinition } from '../types';
 
 export class ExecutionContext implements IExecutionContext {
@@ -39,7 +40,7 @@ export class ExecutionContext implements IExecutionContext {
 
     const r = await p.chat(msgs, { model: o.model, temperature: o.temperature, maxTokens: o.maxTokens, tools: t.length ? t : undefined });
     if (r.usage && r.usage.totalTokens > 0) this.tokens += r.usage.totalTokens;
-    else this.tokens += this.estimateTokens(JSON.stringify(msgs) + (r.content || ''));
+    else this.tokens += estimateTokens(JSON.stringify(msgs) + (r.content || ''));
     this.messages.push({ role: 'user', content: o.prompt });
 
     if (r.toolCalls?.length) return this.handleToolCalls(r.toolCalls, msgs, p, t);
@@ -61,7 +62,7 @@ export class ExecutionContext implements IExecutionContext {
 
     const f = await p.chat(msgs, { tools: t.length ? t : undefined });
     if (f.usage && f.usage.totalTokens > 0) this.tokens += f.usage.totalTokens;
-    else this.tokens += this.estimateTokens(JSON.stringify(msgs) + (f.content || ''));
+    else this.tokens += estimateTokens(JSON.stringify(msgs) + (f.content || ''));
     if (f.toolCalls?.length) return this.handleToolCalls(f.toolCalls, msgs, p, t);
     if (f.content) this.messages.push({ role: 'assistant', content: f.content });
     return f.content ?? '';
@@ -76,9 +77,5 @@ export class ExecutionContext implements IExecutionContext {
     c.messages = [...this.messages];
     this.state.forEach((v, k) => c.state.set(k, v));
     return c;
-  }
-
-  private estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4);
   }
 }

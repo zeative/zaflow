@@ -18,7 +18,7 @@ import { toolRegistry } from '../tools';
 import { ExecutionContext } from './context';
 import { formatOutput } from './formatter';
 import { StepBuilder, type FlowNode } from './step';
-import { getTextContent } from '../helpers';
+import { getTextContent, estimateTokens } from '../helpers';
 
 const TOOL_PROMPT = `You have access to tools. Use them when needed.
 
@@ -171,15 +171,11 @@ export class Orchestrator {
   private async autoProcessMedia(context: ExecutionContext, events: AgentEvent[], options: ExecutionOptions): Promise<string[]> {
     const results: string[] = [];
     const lastUserMsg = context.messages.filter((m) => m.role === 'user').pop();
-    console.log('🔍 autoProcessMedia - lastUserMsg:', lastUserMsg?.role, typeof lastUserMsg?.content);
     if (!lastUserMsg || typeof lastUserMsg.content === 'string') return results;
 
-    console.log('🔍 autoProcessMedia - content parts:', lastUserMsg.content.length);
     for (const part of lastUserMsg.content) {
-      console.log('🔍 autoProcessMedia - part type:', part.type);
       if (part.type === 'image_url') {
         const tool = this.tools.find((t) => t.handles?.includes('image'));
-        console.log('🔍 autoProcessMedia - found tool:', tool?.name);
         if (tool) {
           try {
             const url = (part as import('../types').ImagePart).image_url.url;
@@ -280,10 +276,6 @@ export class Orchestrator {
     };
   }
 
-  private estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4);
-  }
-
   private async executeNodes(nodes: FlowNode[], context: ExecutionContext, steps: StepResult[], options: ExecutionOptions): Promise<void> {
     for (const node of nodes) {
       if (options.signal?.aborted) break;
@@ -333,7 +325,7 @@ export class Orchestrator {
     if (mode === 'single') {
       const r = await this.provider.chat(context.messages);
       if (r.usage && r.usage.totalTokens > 0) context.tokens += r.usage.totalTokens;
-      else context.tokens += this.estimateTokens(JSON.stringify(context.messages) + (r.content || ''));
+      else context.tokens += estimateTokens(JSON.stringify(context.messages) + (r.content || ''));
       context.previous = r.content ?? '';
       if (r.content) context.messages.push({ role: 'assistant', content: r.content });
       steps.push({ id: 'single', output: r.content, tokens: context.tokens, duration: 0 });
@@ -360,7 +352,7 @@ export class Orchestrator {
 
       const r = await this.provider.chat(context.messages, { tools: selectedTools.length ? selectedTools : undefined });
       if (r.usage) context.tokens += r.usage.totalTokens;
-      else context.tokens += this.estimateTokens(JSON.stringify(context.messages) + (r.content || ''));
+      else context.tokens += estimateTokens(JSON.stringify(context.messages) + (r.content || ''));
 
       let calls = r.toolCalls;
       if (!calls?.length && r.content) {
@@ -382,7 +374,7 @@ export class Orchestrator {
       if (!newCalls.length) {
         const final = await this.provider.chat([...context.messages, { role: 'system', content: 'Provide your final answer now.' }]);
         if (final.usage && final.usage.totalTokens > 0) context.tokens += final.usage.totalTokens;
-        else context.tokens += this.estimateTokens(JSON.stringify(context.messages) + (final.content || ''));
+        else context.tokens += estimateTokens(JSON.stringify(context.messages) + (final.content || ''));
         if (final.content) context.messages.push({ role: 'assistant', content: final.content });
         return final.content ?? r.content ?? '';
       }
@@ -406,7 +398,7 @@ export class Orchestrator {
     if (lastAssistant) return getTextContent(lastAssistant.content);
     const final = await this.provider.chat([...context.messages, { role: 'user', content: 'Provide your final response.' }]);
     if (final.usage && final.usage.totalTokens > 0) context.tokens += final.usage.totalTokens;
-    else context.tokens += this.estimateTokens(JSON.stringify(context.messages) + (final.content || ''));
+    else context.tokens += estimateTokens(JSON.stringify(context.messages) + (final.content || ''));
     if (final.content) context.messages.push({ role: 'assistant', content: final.content });
     return final.content ?? '';
   }
@@ -435,14 +427,14 @@ export class Orchestrator {
         context.messages.push({ role: 'system', content: 'Multiple tool errors occurred. Stop using tools and provide your final answer based on what you know.' });
         const final = await this.provider.chat(context.messages);
         if (final.usage && final.usage.totalTokens > 0) context.tokens += final.usage.totalTokens;
-        else context.tokens += this.estimateTokens(JSON.stringify(context.messages) + (final.content || ''));
+        else context.tokens += estimateTokens(JSON.stringify(context.messages) + (final.content || ''));
         if (final.content) context.messages.push({ role: 'assistant', content: final.content });
         return final.content ?? '';
       }
 
       const r = await this.provider.chat(context.messages, { tools: selectedTools.length ? selectedTools : undefined });
       if (r.usage && r.usage.totalTokens > 0) context.tokens += r.usage.totalTokens;
-      else context.tokens += this.estimateTokens(JSON.stringify(context.messages) + (r.content || ''));
+      else context.tokens += estimateTokens(JSON.stringify(context.messages) + (r.content || ''));
 
       const parsed = this.parseJSON(r.content || '');
 
@@ -460,7 +452,7 @@ export class Orchestrator {
             context.tokens += agentResult.usage.totalTokens;
           } else {
             const agentInput = (agent.prompt || '') + query;
-            context.tokens += this.estimateTokens(agentInput + (agentResult.content || ''));
+            context.tokens += estimateTokens(agentInput + (agentResult.content || ''));
           }
 
           this.emit(events, options, { type: 'agent_response', agent: agent.name, output: agentResult.content ?? '' });
@@ -542,7 +534,7 @@ export class Orchestrator {
         { role: 'user', content: `Synthesize a final response from these results:\n${results.join('\n')}` },
       ]);
       if (synthesis.usage && synthesis.usage.totalTokens > 0) context.tokens += synthesis.usage.totalTokens;
-      else context.tokens += this.estimateTokens(JSON.stringify(context.messages) + (synthesis.content || ''));
+      else context.tokens += estimateTokens(JSON.stringify(context.messages) + (synthesis.content || ''));
 
       if (synthesis.content) {
         this.emit(events, options, { type: 'synthesis', output: synthesis.content });
