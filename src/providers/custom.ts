@@ -40,7 +40,7 @@ export function createProvider(config: CustomProviderConfig): ProviderInterface 
         return { content: res, finishReason: 'stop', usage: zero };
       }
 
-      return { content: res.content, finishReason: 'stop', usage: res.usage ?? zero };
+      return { content: res?.content ?? '', finishReason: 'stop', usage: res?.usage ?? zero };
     },
   };
 }

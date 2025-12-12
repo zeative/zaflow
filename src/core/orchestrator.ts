@@ -4,6 +4,7 @@ import type {
   ExecutionMode,
   ExecutionOptions,
   ExecutionResult,
+  ExecutionStats,
   LoopOptions,
   Message,
   ProviderInterface,
@@ -39,16 +40,15 @@ WORKFLOW:
 3. Only use tools directly if no agent is appropriate.
 4. After getting agent/tool results, synthesize the final response.
 
-ACTIONS (Respond with JSON):
+ACTIONS (Respond with JSON for tools/delegation):
 - To DELEGATE: {"delegate": "agent_name", "task": "specific task description"}
 - To USE TOOL: {"tool": "tool_name", "params": {"arg": "value"}}
 
 IMPORTANT:
-- Use "Prompt Engineering" agent for creating/optimizing prompts.
 - Do NOT skip agents and go directly to tools if an agent can help.
 - Ensure "params" matches the tool schema exactly.
 
-Respond with JSON for each action. After all actions complete, provide your final answer.`;
+For the FINAL ANSWER, provide just the plain text response. DO NOT wrap it in JSON.`;
 
 export class Orchestrator {
   private provider: ProviderInterface;
@@ -445,6 +445,11 @@ export class Orchestrator {
       }
 
       if (r.content) {
+        const p = this.parseJSON(r.content);
+        if (p?.final_answer) {
+          context.messages.push({ role: 'assistant', content: p.final_answer as string });
+          return p.final_answer as string;
+        }
         context.messages.push({ role: 'assistant', content: r.content });
         return r.content;
       }
