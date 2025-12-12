@@ -451,9 +451,23 @@ export class Orchestrator {
 
   private async autonomousExec(context: ExecutionContext, options: ExecutionOptions, query: string, events: AgentEvent[]): Promise<string> {
     const maxIter = options.maxIterations ?? 10;
+    const maxToolCalls = options.maxToolCalls ?? 3;
     const agents = agentRegistry.getAll();
     const selectedTools = await this.selectTools(query);
     const results: string[] = [];
+    const usedTools = new Map<string, { count: number; result: string }>();
+
+    const normalizeKey = (tool: string, params: Record<string, unknown>): string => {
+      const normalized = Object.values(params)
+        .map((v) =>
+          String(v)
+            .toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .trim(),
+        )
+        .join('|');
+      return `${tool}:${normalized}`;
+    };
 
     const mediaResults = await this.autoProcessMedia(context, events, options);
     if (mediaResults.length) results.push(...mediaResults);
@@ -465,6 +479,7 @@ export class Orchestrator {
 
     let consecutiveErrors = 0;
     const maxErrors = 2;
+    let totalToolCalls = 0;
 
     for (let iter = 0; iter < maxIter; iter++) {
       if (options.signal?.aborted) break;
@@ -526,14 +541,40 @@ export class Orchestrator {
           continue;
         }
 
+        const toolKey = normalizeKey(parsed.tool, params);
+        const cached = usedTools.get(toolKey);
+
+        if (cached) {
+          context.messages.push({
+            role: 'system',
+            content: `You already called "${parsed.tool}" with similar params. Result was: ${cached.result}\n\nDo NOT call the same tool again. Use this result to provide your final answer.`,
+          });
+          continue;
+        }
+
+        if (totalToolCalls >= maxToolCalls) {
+          context.messages.push({
+            role: 'system',
+            content: `Tool call limit reached (${maxToolCalls}). Provide your final answer using the results you have.`,
+          });
+          break;
+        }
+
         try {
           this.emit(events, options, { type: 'tool_call', tool: parsed.tool, input: JSON.stringify(params) });
           const res = await toolRegistry.execute(parsed.tool, params, context);
           const output = typeof res === 'string' ? res : JSON.stringify(res);
           this.emit(events, options, { type: 'tool_call', tool: parsed.tool, output });
+
+          usedTools.set(toolKey, { count: 1, result: output });
+          totalToolCalls++;
+
           results.push(`[Tool ${parsed.tool}]: ${output}`);
           context.messages.push({ role: 'assistant', content: `Used tool: ${parsed.tool}` });
-          context.messages.push({ role: 'system', content: `Tool result: ${output}` });
+          context.messages.push({
+            role: 'system',
+            content: `Tool result: ${output}\n\nNow provide your final answer based on this result. Do NOT call tools again.`,
+          });
           consecutiveErrors = 0;
           continue;
         } catch (e) {
@@ -544,6 +585,10 @@ export class Orchestrator {
       }
 
       if (r.toolCalls?.length) {
+        if (totalToolCalls >= maxToolCalls) {
+          context.messages.push({ role: 'system', content: `Tool call limit reached. Provide your final answer.` });
+          break;
+        }
         context.messages.push({ role: 'assistant', content: r.content || (null as unknown as string), tool_calls: r.toolCalls });
         for (const call of r.toolCalls) {
           try {
@@ -553,10 +598,22 @@ export class Orchestrator {
               consecutiveErrors++;
               continue;
             }
+
+            const toolKey = normalizeKey(call.function.name, args);
+            const cached = usedTools.get(toolKey);
+            if (cached) {
+              context.messages.push({ role: 'tool', tool_call_id: call.id, content: `Already called with similar params. Result: ${cached.result}` });
+              continue;
+            }
+
             this.emit(events, options, { type: 'tool_call', tool: call.function.name, input: call.function.arguments });
             const res = await toolRegistry.execute(call.function.name, args, context);
             const output = typeof res === 'string' ? res : JSON.stringify(res);
             this.emit(events, options, { type: 'tool_call', tool: call.function.name, output });
+
+            usedTools.set(toolKey, { count: 1, result: output });
+            totalToolCalls++;
+
             results.push(`[Tool ${call.function.name}]: ${output}`);
             context.messages.push({ role: 'tool', tool_call_id: call.id, content: output });
             consecutiveErrors = 0;
