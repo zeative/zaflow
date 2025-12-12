@@ -15,6 +15,7 @@
 <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/stars/zeative/zaflow" alt="GitHub Stars"></a>
 <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/forks/zeative/zaflow" alt="GitHub Forks"></a>
 <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/watchers/zeative/zaflow" alt="GitHub Watchers"></a>
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/zeative/zaflow)
 
 </div>
 
