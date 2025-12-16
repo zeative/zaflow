@@ -47,21 +47,61 @@ const buildPrompt = (msgs: Message[], tools?: ToolDefinition[]): string => {
   const base = msgs
     .map((m) => {
       const text = contentToString(m.content);
-      if (m.role === 'system') return `[System]: ${text}`;
-      if (m.role === 'user') return `[User]: ${text}`;
-      if (m.role === 'assistant' && text) return `[Assistant]: ${text}`;
-      if (m.role === 'tool') return `[Tool Result]: ${text}`;
+      if (m.role === 'system') return text; // Raw system prompt
+      if (m.role === 'user') return `User: ${text}`;
+      if (m.role === 'assistant' && text) return `Assistant: ${text}`;
+      if (m.role === 'tool') return `Tool Result: ${text}`;
       return '';
     })
     .filter(Boolean)
     .join('\n\n');
 
   if (!tools?.length) return base;
-  const toolList = tools.map(formatToolSchema).join('\n');
-  return `${base}\n\n[CRITICAL INSTRUCTION]\nYou MUST use tools when the user explicitly asks. Available tools:\n${toolList}\n\nTo use a tool, respond with ONLY this JSON (no other text):\n{"tool": "tool_name", "params": {...}}\n\nThe user asked to use a tool. You MUST respond with the JSON format above.`;
+
+  // Check if the last message is a tool result
+  const lastMsg = msgs[msgs.length - 1];
+  const isToolResult = lastMsg?.role === 'tool';
+
+  // Inject instruction into the last user message ONLY if we haven't just received a tool result
+  let lastUserIdx = -1;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+
+  if (lastUserIdx !== -1) {
+    return msgs
+      .map((m, i) => {
+        let text = contentToString(m.content);
+        if (i === lastUserIdx && !isToolResult) {
+          // FORCE tool usage if we are at the start of a turn
+          text += `\n\n[SYSTEM]: You MUST use a tool (like "web_search") to answer. Respond with JSON: {"tool": "...", "params": {...}}`;
+        }
+        if (m.role === 'system') return text;
+        if (m.role === 'user') return `User: ${text}`;
+        if (m.role === 'assistant' && text) return `Assistant: ${text}`;
+        if (m.role === 'tool') return `Tool Result: ${text}`;
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  return `${base}\n\n[System]: REMINDER: Use JSON format for tools.`;
 };
 
 const parseJSON = (content: string): Record<string, unknown> | null => {
+  // Try to find JSON in markdown code blocks first
+  const match = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (match) {
+    try {
+      return JSON.parse(match[1]);
+    } catch {}
+  }
+
+  // Fallback to finding the first valid JSON object
   let depth = 0,
     start = -1;
   for (let i = 0; i < content.length; i++) {

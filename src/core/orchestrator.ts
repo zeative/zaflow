@@ -1,3 +1,8 @@
+import * as z from 'zod';
+import { agentRegistry } from '../agents';
+import { estimateTokens, getTextContent, resolveImageUrl } from '../helpers';
+import { prompts } from '../prompts';
+import { toolRegistry } from '../tools';
 import type {
   AgentEvent,
   ConditionalBranch,
@@ -12,13 +17,9 @@ import type {
   StepResult,
   ToolDefinition,
 } from '../types';
-import * as z from 'zod';
-import { agentRegistry } from '../agents';
-import { toolRegistry } from '../tools';
 import { ExecutionContext } from './context';
 import { formatOutput } from './formatter';
 import { StepBuilder, type FlowNode } from './step';
-import { getTextContent, estimateTokens, resolveImageUrl, stripMediaFromMessages } from '../helpers';
 
 const TOOL_PROMPT = `You have access to tools. Use them when needed.
 
@@ -479,7 +480,37 @@ export class Orchestrator {
     const agentDesc = agents.length ? agents.map((a) => `- ${a.name}: ${a.prompt?.slice(0, 80) || 'General purpose agent'}`).join('\n') : 'No agents available';
     const toolDesc = selectedTools.length ? selectedTools.map((t) => this.formatToolSchema(t)).join('\n') : 'No tools available';
 
-    context.messages.unshift({ role: 'system', content: AUTONOMOUS_PROMPT.replace('{{agents}}', agentDesc).replace('{{tools}}', toolDesc) });
+    // Combine user's system prompt (if any) with the orchestrator prompt
+    // We put the orchestrator prompt LAST to ensure tool instructions are fresh in context
+    const orchestratorPrompt = prompts.get('orchestrator', { agents: agentDesc, tools: toolDesc });
+
+    // Find existing system prompt
+    const sysIdx = context.messages.findIndex((m) => m.role === 'system');
+    if (sysIdx !== -1) {
+      // Append orchestrator prompt to existing system prompt
+      context.messages[sysIdx].content += `\n\n${orchestratorPrompt}`;
+    } else {
+      // Create new system prompt
+      context.messages.unshift({ role: 'system', content: orchestratorPrompt });
+    }
+
+    // Inject instruction into the last user message to FORCE tool usage
+    // This overcomes "persona" prompts that might make the AI too chatty
+    let lastUserIdx = -1;
+    for (let i = context.messages.length - 1; i >= 0; i--) {
+      if (context.messages[i].role === 'user') {
+        lastUserIdx = i;
+        break;
+      }
+    }
+
+    if (lastUserIdx !== -1) {
+      context.messages[lastUserIdx].content += `\n\n[SYSTEM]: IF this request requires a search or action, you MUST use a tool (like "web_search") IMMEDIATELY.
+DO NOT say "I will search" or "Let me check".
+JANGAN bilang "Aku cari dulu" atau "Sebentar".
+LANGSUNG GUNAKAN ALAT (TOOL).
+USE THE TOOL NOW.`;
+    }
 
     let consecutiveErrors = 0;
     const maxErrors = 2;
