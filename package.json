@@ -30,10 +30,11 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "example:single": "tsx examples/single-mode.ts",
-    "example:agentic": "tsx examples/agentic-mode.ts",
-    "example:autonomous": "tsx examples/autonomous-mode.ts",
-    "example:streaming": "tsx examples/streaming.ts",
+    "example:single": "tsx .examples/single-mode.ts",
+    "example:agentic": "tsx .examples/agentic-mode.ts",
+    "example:autonomous": "tsx .examples/autonomous-mode.ts",
+    "example:streaming": "tsx .examples/streaming.ts",
+    "example:custom": "tsx .examples/custom-provider.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

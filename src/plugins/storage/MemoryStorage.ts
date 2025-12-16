@@ -1,4 +1,4 @@
-import type { StoragePlugin } from '../types/storage';
+import type { StoragePlugin } from '../../types/storage';
 
 /**
  * In-memory storage with TTL support

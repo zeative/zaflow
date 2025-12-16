@@ -27,6 +27,6 @@ export function validateWithErrors<T extends z.ZodSchema>(schema: T, data: unkno
 
   return {
     success: false,
-    errors: result.error.errors,
+    errors: result.error.issues,
   };
 }

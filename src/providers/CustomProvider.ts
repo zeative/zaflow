@@ -10,7 +10,7 @@ import type { Tool } from '../types/tool';
 export class CustomProvider extends BaseProvider implements Provider {
   name: string;
   type = 'custom';
-  defaultModel?: string;
+  declare defaultModel?: string;
   private adapter: ProviderAdapter;
 
   constructor(definition: ProviderDefinition) {
@@ -27,5 +27,10 @@ export class CustomProvider extends BaseProvider implements Provider {
 
   async chat(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): Promise<ProviderResponse> {
     return await this.adapter(messages, config, tools);
+  }
+
+  async *stream(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): AsyncIterableIterator<string> {
+    // Custom adapters don't support streaming by default
+    throw new Error('Streaming is not supported for custom providers. Please implement streaming in your adapter or use the run() method instead.');
   }
 }

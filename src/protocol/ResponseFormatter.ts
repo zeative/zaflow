@@ -1,5 +1,4 @@
 import type { Tool } from '../types/tool';
-import { zodToJsonSchema } from './SchemaConverter';
 
 /**
  * Format tools for different providers

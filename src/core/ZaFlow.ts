@@ -127,10 +127,10 @@ export default class ZaFlow<TContext = any> {
     if (this.mode === 'agentic' || this.mode === 'autonomous') {
       console.log(`[STREAM] ${this.mode.toUpperCase()} mode - executing fully then streaming result...`);
 
-      // Execute fully with all tools/agents
+      // Execute fully with all tools/agents - ALWAYS get detailed metadata
       const response = await this.run(message, {
         persistContext: options?.persistContext,
-        detailed: false,
+        detailed: true, // Always generate metadata for hooks
       });
 
       // Simulate streaming of the complete result

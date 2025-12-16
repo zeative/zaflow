@@ -14,7 +14,7 @@ export class OllamaProvider extends BaseProvider implements Provider {
   name = 'ollama';
   type = 'ollama';
   private client: Ollama;
-  defaultModel?: string;
+  declare defaultModel?: string;
 
   constructor(baseURL: string = 'http://localhost:11434', defaultModel?: string) {
     super();

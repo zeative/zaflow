@@ -12,7 +12,7 @@ export class OpenAIProvider extends BaseProvider implements Provider {
   name = 'openai';
   type = 'openai';
   private client: OpenAI;
-  defaultModel?: string;
+  declare defaultModel?: string;
 
   constructor(apiKey: string, defaultModel?: string) {
     super();
@@ -90,17 +90,17 @@ export class OpenAIProvider extends BaseProvider implements Provider {
       ...(msg.toolCallId && { tool_call_id: msg.toolCallId }),
     }));
 
-    const options: any = {
+    const options = {
       model: this.defaultModel,
       messages: openaiMessages,
       temperature: config.temperature,
       max_tokens: config.maxTokens,
-      stream: true,
+      stream: true as const,
+      ...(tools &&
+        tools.length > 0 && {
+          tools: ResponseFormatter.formatToolsAsJSON(tools),
+        }),
     };
-
-    if (tools && tools.length > 0) {
-      options.tools = ResponseFormatter.formatToolsAsJSON(tools);
-    }
 
     const stream = await this.client.chat.completions.create(options);
 
