@@ -1,23 +1,28 @@
 <div align="center">
-  <img alt="ZaFlow - Lightweight TypeScript library for building efficient AI agent workflows and Langchain/Langgraph alternative." src="https://socialify.git.ci/zeative/zaflow/image?custom_description=Lightweight+TypeScript+library+for+building+efficient+AI+agent+flows.&custom_language=TypeScript&description=1&font=Inter&language=1&owner=1&pattern=Charlie+Brown&theme=Auto">
+<img alt="ZaFlow - Lightweight TypeScript library for building efficient AI agent workflows." src="https://github.com/zeative/zeative/blob/main/libraries/zaflow/icon.png?raw=true" width="140">
 
-  <h1 align="center">ZaFlow - Lightweight TypeScript library for building efficient AI agent workflows and Langchain/Langgraph alternative.</h1>
+<h1 align="center">ZaFlow - Lightweight TypeScript library for building efficient AI agent workflows.</h1>
 
-<a href="https://www.npmjs.com/package/zaflow"><img src="https://img.shields.io/npm/v/zaflow.svg" alt="NPM Version"></a>
-<a href="https://www.npmjs.com/package/zaflow"><img src="https://img.shields.io/npm/dw/zaflow?label=npm&color=%23CB3837" alt="NPM Downloads"></a>
-<a href="https://github.com/zeative/zaflow/releases"><img src="https://img.shields.io/npm/dt/zaflow" alt="NPM Downloads"></a>
-<a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/languages/code-size/zeative/zaflow" alt="GitHub Code Size"></a>
-<a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/issues/zeative/zaflow" alt="GitHub Issues"></a>
-<a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/issues-closed/zeative/zaflow" alt="GitHub Closed Issues"></a>
-<a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript" alt="TypeScript"></a>
-<a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/license/zeative/zaflow" alt="GitHub License"></a>
-<a href="https://discord.gg/SfnWWYUe"><img alt="Discord" src="https://img.shields.io/discord/1105833273415962654?logo=discord&label=discord&link=https%3A%2F%2Fgithub.com%2Fzeative%2Fzaflow"></a>
-<a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/stars/zeative/zaflow" alt="GitHub Stars"></a>
-<a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/forks/zeative/zaflow" alt="GitHub Forks"></a>
-<a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/watchers/zeative/zaflow" alt="GitHub Watchers"></a>
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/zeative/zaflow)
+<br>
 
+<div align="center">
+  <a href="https://www.npmjs.com/package/zaflow"><img src="https://img.shields.io/npm/v/zaflow.svg" alt="NPM Version"></a>
+  <a href="https://www.npmjs.com/package/zaflow"><img src="https://img.shields.io/npm/dw/zaflow?label=npm&color=%23CB3837" alt="NPM Downloads"></a>
+  <a href="https://github.com/zeative/zaflow/releases"><img src="https://img.shields.io/npm/dt/zaflow" alt="NPM Downloads"></a>
+  <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/languages/code-size/zeative/zaflow" alt="GitHub Code Size"></a>
+  <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/badge/TypeScript-5.0%2B-blue?style=flat-square&logo=typescript" alt="TypeScript"></a>
 </div>
+
+<div align="center">
+  <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/license/zeative/zaflow" alt="GitHub License"></a>
+  <a href="https://discord.gg/SfnWWYUe"><img alt="Discord" src="https://img.shields.io/discord/1105833273415962654?logo=discord&label=discord&link=https%3A%2F%2Fgithub.com%2Fzeative%2Fzaflow"></a>
+  <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/stars/zeative/zaflow" alt="GitHub Stars"></a>
+  <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/forks/zeative/zaflow" alt="GitHub Forks"></a>
+  <a href="https://github.com/zeative/zaflow"><img src="https://img.shields.io/github/watchers/zeative/zaflow" alt="GitHub Watchers"></a>
+  <a href="https://deepwiki.com/zeative/zaflow"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+</div>
+
+<br>
 
 <div align="center">
   <p>
@@ -43,7 +48,11 @@
 [🤝 Contributing](#-contributing)
 
 <br>
+
 <a href="https://discord.gg/SfnWWYUe"><img alt="Discord" src="https://discord.com/api/guilds/1105833273415962654/widget.png?style=banner2"></a>
+
+</div>
+
 </div>
 
 <br>
@@ -679,3 +688,10 @@ Contributions are welcome! Please follow these steps:
 ## 📜 License
 
 Distributed under the **MIT License**. See [`LICENSE`](https://github.com/zeative/zaflow/blob/main/LICENSE) for details.
+
+<div align="left">
+  <p>
+    <img alt="ZaFlow - Lightweight TypeScript library for building efficient AI agent workflows." src="https://github.com/zeative/zeative/blob/main/libraries/zaflow/icon.png?raw=true" width="28" align="center">
+    Copyright © 2025 zaadevofc. All rights reserved.
+  </p>
+</div><!--  -->

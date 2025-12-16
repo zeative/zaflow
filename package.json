@@ -1,6 +1,6 @@
 {
   "name": "zaflow",
-  "description": "ZaFlow - Lightweight AI Flow Orchestration Library",
+  "description": "ZaFlow - Lightweight TypeScript library for building efficient AI agent workflows.",
   "version": "1.0.3",
   "license": "MIT",
   "main": "dist/index.js",
@@ -30,7 +30,9 @@
     "orchestration",
     "llm",
     "agent",
-    "automation"
+    "automation",
+    "langchain",
+    "langgraph"
   ],
   "devDependencies": {
     "@types/node": "^25.0.0",
@@ -42,6 +44,8 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "axios": "^1.13.2",
+    "uuid": "^13.0.0",
     "zod": "^4.1.13"
   },
   "peerDependencies": {
