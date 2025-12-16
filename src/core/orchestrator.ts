@@ -365,7 +365,13 @@ export class Orchestrator {
     steps.push(...results);
   }
 
-  private async executeMode(mode: ExecutionMode, context: ExecutionContext, steps: StepResult[], options: ExecutionOptions, events: AgentEvent[]): Promise<void> {
+  private async executeMode(
+    mode: ExecutionMode,
+    context: ExecutionContext,
+    steps: StepResult[],
+    options: ExecutionOptions,
+    events: AgentEvent[],
+  ): Promise<void> {
     const lastUserMsg = context.messages.filter((m) => m.role === 'user').pop();
     const query = lastUserMsg ? getTextContent(lastUserMsg.content) : '';
     if (mode === 'single') {
@@ -520,7 +526,10 @@ USE THE TOOL NOW.`;
       if (options.signal?.aborted) break;
 
       if (consecutiveErrors >= maxErrors) {
-        context.messages.push({ role: 'system', content: 'Multiple tool errors occurred. Stop using tools and provide your final answer based on what you know.' });
+        context.messages.push({
+          role: 'system',
+          content: 'Multiple tool errors occurred. Stop using tools and provide your final answer based on what you know.',
+        });
         const final = await this.provider.chat(context.messages);
         if (final.usage && final.usage.totalTokens > 0) context.tokens += final.usage.totalTokens;
         else context.tokens += estimateTokens(JSON.stringify(context.messages) + (final.content || ''));
@@ -565,17 +574,6 @@ USE THE TOOL NOW.`;
 
       if (parsed?.tool && typeof parsed.tool === 'string') {
         const params = (parsed.params as Record<string, unknown>) || {};
-        const hasValidParams = Object.keys(params).length > 0 && Object.values(params).every((v) => v !== undefined && v !== null && v !== '');
-
-        if (!hasValidParams) {
-          context.messages.push({
-            role: 'system',
-            content: `Invalid tool params. Tool "${parsed.tool}" requires valid parameters. Check the tool schema and try again with proper values, or provide your final answer.`,
-          });
-          consecutiveErrors++;
-          continue;
-        }
-
         const toolKey = normalizeKey(parsed.tool, params);
         const cached = usedTools.get(toolKey);
 
@@ -666,8 +664,15 @@ USE THE TOOL NOW.`;
           context.messages.push({ role: 'assistant', content: p.final_answer as string });
           return p.final_answer as string;
         }
+
+        // If just text, add to history and prompt to continue or finish
         context.messages.push({ role: 'assistant', content: r.content });
-        return r.content;
+        context.messages.push({
+          role: 'system',
+          content:
+            'If you have completed the user request, output JSON { "final_answer": "YOUR FINAL RESPONSE" }. If you need to perform more actions, call the next tool.',
+        });
+        continue;
       }
     }
 
