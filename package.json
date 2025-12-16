@@ -1,7 +1,7 @@
 {
   "name": "zaflow",
-  "description": "ZaFlow - Lightweight TypeScript library for building efficient AI agent workflows.",
-  "version": "1.0.5",
+  "description": "Lightweight TypeScript library for building efficient AI agent workflows optimized for free-tier models",
+  "version": "1.0.0",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -11,56 +11,76 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "import": "./dist/index.mjs"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "require": "./dist/plugins/index.js",
+      "import": "./dist/plugins/index.mjs"
     }
   },
-  "author": "zaadevofc",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "author": "Zeative Labs",
   "repository": {
     "url": "git+https://github.com/zeative/zaflow.git"
   },
   "scripts": {
-    "test": "bun run examples/test.ts",
     "build": "tsup",
-    "r:patch": "npm run build && npm version patch && npm publish",
-    "r:minor": "npm run build && npm version minor && npm publish",
-    "r:major": "npm run build && npm version major && npm publish"
+    "typecheck": "tsc --noEmit",
+    "example:single": "tsx examples/single-mode.ts",
+    "example:agentic": "tsx examples/agentic-mode.ts",
+    "example:autonomous": "tsx examples/autonomous-mode.ts",
+    "example:streaming": "tsx examples/streaming.ts",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "ai",
-    "flow",
-    "orchestration",
-    "llm",
     "agent",
-    "automation",
-    "langchain",
-    "langgraph"
+    "workflow",
+    "llm",
+    "typescript",
+    "groq",
+    "ollama",
+    "openai",
+    "token-optimization",
+    "free-tier",
+    "agentic",
+    "autonomous",
+    "tool-calling"
   ],
-  "devDependencies": {
-    "@types/node": "^25.0.0",
-    "groq-sdk": "^0.37.0",
-    "ollama": "^0.6.3",
-    "openai": "^6.10.0",
-    "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "zod": "^4.1.13"
-  },
   "peerDependencies": {
-    "groq-sdk": ">=0.3.0",
-    "ollama": ">=0.5.0",
-    "openai": ">=4.0.0"
+    "groq-sdk": "^0.5.0 || ^0.6.0 || ^0.7.0",
+    "ollama": "^0.5.0",
+    "openai": "^4.0.0",
+    "zod": "^3.22.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
-    "openai": {
-      "optional": true
-    },
     "groq-sdk": {
       "optional": true
     },
     "ollama": {
       "optional": true
+    },
+    "openai": {
+      "optional": true
     }
+  },
+  "dependencies": {
+    "nanoid": "^5.0.4",
+    "p-retry": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "groq-sdk": "^0.7.0",
+    "ollama": "^0.5.9",
+    "openai": "^4.73.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "zod": "^4.1.13"
   },
   "packageManager": "pnpm@10.24.0",
   "engines": {

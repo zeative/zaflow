@@ -1,0 +1,64 @@
+import type { Agent as IAgent, AgentDefinition, AgentCapability } from '../types/agent';
+import type { Tool } from '../types/tool';
+import type { ModelConfig } from '../types/core';
+
+/**
+ * Agent implementation
+ */
+export class Agent implements IAgent {
+  name: string;
+  role: string;
+  systemPrompt?: string;
+  tools?: Tool[];
+  model: string;
+  config?: ModelConfig;
+  capabilities?: AgentCapability[];
+  constraints?: {
+    maxToolCalls?: number;
+    maxExecutionTime?: number;
+  };
+
+  constructor(definition: AgentDefinition) {
+    this.name = definition.name;
+    this.role = definition.role;
+    this.systemPrompt = definition.systemPrompt;
+    this.tools = definition.tools;
+    this.model = definition.model;
+    this.config = definition.config;
+    this.capabilities = definition.capabilities;
+    this.constraints = definition.constraints;
+  }
+
+  /**
+   * Generate system prompt for this agent
+   */
+  getSystemPrompt(): string {
+    if (this.systemPrompt) {
+      return this.systemPrompt;
+    }
+
+    // Auto-generate from role and capabilities
+    let prompt = `You are a ${this.role}.`;
+
+    if (this.capabilities && this.capabilities.length > 0) {
+      prompt += `\n\nYour capabilities include: ${this.capabilities.join(', ')}.`;
+    }
+
+    if (this.tools && this.tools.length > 0) {
+      prompt += `\n\nYou have access to the following tools: ${this.tools.map((t) => t.name).join(', ')}.`;
+    }
+
+    return prompt;
+  }
+
+  /**
+   * Check if agent has a capability
+   */
+  hasCapability(capability: string): boolean {
+    if (!this.capabilities) {
+      return false;
+    }
+
+    return this.capabilities.some((cap) => cap.toLowerCase().includes(capability.toLowerCase()));
+  }
+}

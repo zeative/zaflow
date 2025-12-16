@@ -1,84 +1,59 @@
-import type { ContentPart, ImagePart, Message, TextPart } from './types';
-import { createMediaRef, isMediaRef, resolveMediaRef } from './core/media';
+import type { z } from 'zod';
+import type { ToolDefinition, Tool as ITool } from './types/tool';
+import type { AgentDefinition, Agent as IAgent } from './types/agent';
+import type { ProviderDefinition, Provider } from './types/provider';
+import type { StorageDefinition, StoragePlugin } from './types/storage';
+import { Tool } from './core/Tool';
+import { Agent } from './core/Agent';
+import { GroqProvider } from './providers/GroqProvider';
+import { OllamaProvider } from './providers/OllamaProvider';
+import { OpenAIProvider } from './providers/OpenAIProvider';
+import { CustomProvider } from './providers/CustomProvider';
+import { defineStorage } from './plugins/storage/StoragePlugin';
 
-export const text = (t: string): TextPart => ({ type: 'text', text: t });
+/**
+ * Define a tool
+ */
+export function defineTool<TSchema extends z.ZodSchema>(definition: ToolDefinition<TSchema>): ITool<TSchema> {
+  return new Tool(definition);
+}
 
-export const image = (url: string, detail?: 'auto' | 'low' | 'high'): ImagePart => {
-  const isBase64 = url.startsWith('data:');
-  const ref = isBase64 ? createMediaRef(url, 'image') : url;
+/**
+ * Define an agent
+ */
+export function defineAgent(definition: AgentDefinition): IAgent {
+  return new Agent(definition);
+}
 
-  return { type: 'image_url', image_url: { url: ref, detail } };
-};
-
-export const imageBase64 = (base64: string, mimeType = 'image/png'): ImagePart => {
-  const dataUrl = `data:${mimeType};base64,${base64}`;
-  const ref = createMediaRef(dataUrl, 'image', mimeType);
-
-  return { type: 'image_url', image_url: { url: ref } };
-};
-
-export const msg = {
-  user: (content: string | ContentPart[]): Message => ({ role: 'user', content }),
-  system: (content: string): Message => ({ role: 'system', content }),
-  assistant: (content: string): Message => ({ role: 'assistant', content }),
-};
-
-export const getTextContent = (content: string | ContentPart[]): string => {
-  if (typeof content === 'string') return content;
-
-  return content
-    .filter((p): p is TextPart => p.type === 'text')
-    .map((p) => p.text)
-    .join(' ');
-};
-
-export const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
-
-export const resolveImageUrl = (urlOrRef: string): string => {
-  if (!isMediaRef(urlOrRef)) return urlOrRef;
-
-  const entry = resolveMediaRef(urlOrRef);
-  return entry?.data ?? urlOrRef;
-};
-
-export const stripMediaFromMessages = (messages: Message[]): Message[] => {
-  return messages.map((message) => {
-    if (typeof message.content === 'string') return message;
-
-    const filtered = message.content.filter((part) => {
-      if (part.type === 'image_url') return false;
-      if (part.type === 'audio') return false;
-      if (part.type === 'file') return false;
-      return true;
-    });
-
-    if (!filtered.length) return { ...message, content: '[Media content]' };
-    return { ...message, content: filtered };
-  });
-};
-
-export const resolveMediaInMessages = (messages: Message[]): Message[] => {
-  return messages.map((message) => {
-    if (typeof message.content === 'string') return message;
-
-    const resolved = message.content.map((part) => {
-      if (part.type === 'image_url' && isMediaRef(part.image_url.url)) {
-        const data = resolveImageUrl(part.image_url.url);
-        return { ...part, image_url: { ...part.image_url, url: data } };
+/**
+ * Define a provider
+ */
+export function defineProvider(definition: ProviderDefinition): Provider {
+  switch (definition.type) {
+    case 'groq':
+      if (!definition.apiKey) {
+        throw new Error('Groq provider requires an API key');
       }
+      return new GroqProvider(definition.apiKey, definition.defaultModel);
 
-      return part;
-    });
+    case 'ollama':
+      return new OllamaProvider(definition.baseURL, definition.defaultModel);
 
-    return { ...message, content: resolved };
-  });
-};
+    case 'openai':
+      if (!definition.apiKey) {
+        throw new Error('OpenAI provider requires an API key');
+      }
+      return new OpenAIProvider(definition.apiKey, definition.defaultModel);
 
-export const randomValues = (arr: string[]) => {
-  return arr[Math.floor(Math.random() * arr.length)];
-};
+    case 'custom':
+      return new CustomProvider(definition);
 
-export const jsonCompact = (obj: any, pruneEmpty = true) => {
-  const cleaned = pruneEmpty ? Object.fromEntries(Object.entries(obj).filter(([_, v]) => v != null && v !== '')) : obj;
-  return JSON.stringify(cleaned).replace(/"([^"]+)":/g, '$1:');
-};
+    default:
+      throw new Error(`Unknown provider type: ${definition.type}`);
+  }
+}
+
+/**
+ * Export storage definition helper
+ */
+export { defineStorage };
