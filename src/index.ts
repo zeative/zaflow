@@ -5,6 +5,9 @@ export { default as ZaFlow } from './core/ZaFlow';
 // Helper functions
 export { defineTool, defineAgent, defineProvider, defineStorage } from './helpers';
 
+// Utils functions
+export * from './utils';
+
 // Type exports
 export type {
   // Core types
