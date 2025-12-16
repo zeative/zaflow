@@ -73,3 +73,12 @@ export const resolveMediaInMessages = (messages: Message[]): Message[] => {
     return { ...message, content: resolved };
   });
 };
+
+export const randomValues = (arr: string[]) => {
+  return arr[Math.floor(Math.random() * arr.length)];
+};
+
+export const jsonCompact = (obj: any, pruneEmpty = true) => {
+  const cleaned = pruneEmpty ? Object.fromEntries(Object.entries(obj).filter(([_, v]) => v != null && v !== '')) : obj;
+  return JSON.stringify(cleaned).replace(/"([^"]+)":/g, '$1:');
+};
