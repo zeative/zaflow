@@ -30,8 +30,6 @@
   </p>
 </div>
 
-<br>
-
 <div align="center">
 
 [🚀 Overview](#-overview) &nbsp;&nbsp;•&nbsp;&nbsp;
