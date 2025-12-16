@@ -9,15 +9,19 @@ class ToolRegistry {
   register(tool: ToolDefinition): void {
     this.tools.set(tool.name, tool);
   }
+
   registerMany(tools: ToolDefinition[]): void {
     tools.forEach((t) => this.register(t));
   }
+
   get(name: string): ToolDefinition | undefined {
     return this.tools.get(name);
   }
+
   getAll(): ToolDefinition[] {
     return [...this.tools.values()];
   }
+
   has(name: string): boolean {
     return this.tools.has(name);
   }
@@ -33,16 +37,19 @@ class ToolRegistry {
     }
 
     const maxRetries = tool.config?.retryable ? tool.config.maxRetries ?? 3 : 1;
-    let result: unknown,
-      lastErr: Error | null = null;
+
+    let result: unknown;
+    let lastErr: Error | null = null;
 
     for (let i = 0; i < maxRetries; i++) {
       try {
         const validated = tool.schema.parse(params);
+
         result = await Promise.race([
           Promise.resolve(tool.handler(validated, context)),
           new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout')), tool.config?.timeout ?? 30000)),
         ]);
+
         lastErr = null;
         break;
       } catch (e) {

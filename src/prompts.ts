@@ -13,7 +13,6 @@ CRITICAL RULES:
 6. If the user asks to SEARCH, FIND, or CHECK something, you MUST use a tool (like web_search), even if you know the answer.
 7. DO NOT answer from your own knowledge if the user asks to SEARCH. You MUST use the tool first.
 8. DO NOT say "I will search" or "Let me check". JUST SEARCH.
-9. JANGAN bilang "Aku cari dulu". LANGSUNG GUNAKAN ALAT.
 
 EXAMPLES:
 User: "Search news" -> {"tool": "web_search", "params": {"query": "news"}}
@@ -41,18 +40,20 @@ export class PromptManager {
   #prompts = new Map<string, string>(Object.entries(builtinPrompts));
 
   get(name: string, vars?: Record<string, string>): string {
-    let p = this.#prompts.get(name);
-    if (!p) throw new Error(`Prompt not found: ${name}`);
-    if (vars) for (const [k, v] of Object.entries(vars)) p = p.replaceAll(`{{${k}}}`, v);
-    return p;
+    let prompt = this.#prompts.get(name);
+    if (!prompt) throw new Error(`Prompt not found: ${name}`);
+    if (vars) for (const [k, v] of Object.entries(vars)) prompt = prompt.replaceAll(`{{${k}}}`, v);
+    return prompt;
   }
 
   set(name: string, template: string): void {
     this.#prompts.set(name, template);
   }
+
   has(name: string): boolean {
     return this.#prompts.has(name);
   }
+
   list(): string[] {
     return [...this.#prompts.keys()];
   }

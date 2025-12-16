@@ -1,3 +1,4 @@
+import z from 'zod';
 import type { Message, ProviderInterface, ProviderOptions, ProviderResponse } from '../types';
 
 export type OpenAIModel = 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo' | 'gpt-4' | 'gpt-3.5-turbo' | 'o1' | 'o1-mini' | 'o1-preview' | (string & {});
@@ -43,6 +44,7 @@ type OpenAIClient = {
     };
   };
 };
+
 type GroqClient = OpenAIClient;
 type OllamaClient = {
   chat: (p: unknown) => Promise<{
@@ -58,7 +60,9 @@ export function openai(config: OpenAIConfig): ProviderInterface {
 
   const getClient = async (): Promise<OpenAIClient> => {
     if (client) return client;
+
     const { default: OpenAI } = await import('openai');
+
     client = new OpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
@@ -66,34 +70,45 @@ export function openai(config: OpenAIConfig): ProviderInterface {
       timeout: config.timeout,
       maxRetries: config.maxRetries,
     }) as unknown as OpenAIClient;
+
     return client;
   };
 
   return {
     name: 'openai',
     async chat(messages: Message[], options?: ProviderOptions): Promise<ProviderResponse> {
-      const c = await getClient();
-      const z = await import('zod');
+      const client = await getClient();
+
       const tools = options?.tools?.length
-        ? options.tools.map((t) => ({
+        ? options.tools.map((tool) => ({
             type: 'function' as const,
-            function: { name: t.name, description: t.description, parameters: z.toJSONSchema(t.schema) },
+            function: { name: tool.name, description: tool.description, parameters: z.toJSONSchema(tool.schema) },
           }))
         : undefined;
-      const r = await c.chat.completions.create({
+
+      const response = await client.chat.completions.create({
         model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content, name: m.name, tool_call_id: m.tool_call_id, tool_calls: m.tool_calls })),
+        messages: messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+          name: message.name,
+          tool_call_id: message.tool_call_id,
+          tool_calls: message.tool_calls,
+        })),
         temperature: options?.temperature,
         max_tokens: options?.maxTokens,
         tools,
         tool_choice: tools ? 'auto' : undefined,
       });
-      const ch = r.choices[0];
+
+      const choice = response.choices[0];
       return {
-        content: ch.message.content,
-        toolCalls: ch.message.tool_calls as ProviderResponse['toolCalls'],
-        finishReason: ch.finish_reason === 'tool_calls' ? 'tool_calls' : ch.finish_reason === 'length' ? 'length' : 'stop',
-        usage: r.usage ? { promptTokens: r.usage.prompt_tokens, completionTokens: r.usage.completion_tokens, totalTokens: r.usage.total_tokens } : undefined,
+        content: choice.message.content,
+        toolCalls: choice.message.tool_calls as ProviderResponse['toolCalls'],
+        finishReason: choice.finish_reason === 'tool_calls' ? 'tool_calls' : choice.finish_reason === 'length' ? 'length' : 'stop',
+        usage: response.usage
+          ? { promptTokens: response.usage.prompt_tokens, completionTokens: response.usage.completion_tokens, totalTokens: response.usage.total_tokens }
+          : undefined,
       };
     },
   };
@@ -105,8 +120,10 @@ export function groq(config: GroqConfig): ProviderInterface {
 
   const getClient = async (): Promise<GroqClient> => {
     if (client) return client;
+
     const mod = await import('groq-sdk');
     const Groq = mod.default ?? mod.Groq;
+
     client = new Groq({ apiKey: config.apiKey, timeout: config.timeout ?? 60000, maxRetries: config.maxRetries ?? 2 }) as unknown as GroqClient;
     return client;
   };
@@ -114,48 +131,70 @@ export function groq(config: GroqConfig): ProviderInterface {
   return {
     name: 'groq',
     async chat(messages: Message[], options?: ProviderOptions): Promise<ProviderResponse> {
-      const c = await getClient();
-      const z = await import('zod');
+      const client = await getClient();
+
       const tools = options?.tools?.length
-        ? options.tools.map((t) => ({
+        ? options.tools.map((tool) => ({
             type: 'function' as const,
-            function: { name: t.name, description: t.description, parameters: z.toJSONSchema(t.schema) },
+            function: { name: tool.name, description: tool.description, parameters: z.toJSONSchema(tool.schema) },
           }))
         : undefined;
+
       try {
-        const r = await c.chat.completions.create({
+        const response = await client.chat.completions.create({
           model,
-          messages: messages.map((m) => ({ role: m.role, content: m.content ?? '', name: m.name, tool_call_id: m.tool_call_id, tool_calls: m.tool_calls })),
+          messages: messages.map((message) => ({
+            role: message.role,
+            content: message.content ?? '',
+            name: message.name,
+            tool_call_id: message.tool_call_id,
+            tool_calls: message.tool_calls,
+          })),
           temperature: options?.temperature ?? 0.7,
           max_tokens: options?.maxTokens ?? 4096,
           tools,
           tool_choice: tools ? 'auto' : undefined,
           parallel_tool_calls: false,
         });
-        const ch = r.choices?.[0];
-        if (!ch) return { content: '', finishReason: 'stop', usage: undefined };
+
+        const choice = response.choices?.[0];
+        if (!choice) return { content: '', finishReason: 'stop', usage: undefined };
+
         return {
-          content: ch.message.content ?? '',
-          toolCalls: ch.message.tool_calls as ProviderResponse['toolCalls'],
-          finishReason: ch.finish_reason === 'tool_calls' ? 'tool_calls' : ch.finish_reason === 'length' ? 'length' : 'stop',
-          usage: r.usage ? { promptTokens: r.usage.prompt_tokens, completionTokens: r.usage.completion_tokens, totalTokens: r.usage.total_tokens } : undefined,
+          content: choice.message.content ?? '',
+          toolCalls: choice.message.tool_calls as ProviderResponse['toolCalls'],
+          finishReason: choice.finish_reason === 'tool_calls' ? 'tool_calls' : choice.finish_reason === 'length' ? 'length' : 'stop',
+          usage: response.usage
+            ? { promptTokens: response.usage.prompt_tokens, completionTokens: response.usage.completion_tokens, totalTokens: response.usage.total_tokens }
+            : undefined,
         };
       } catch (e: unknown) {
         const err = e as { code?: string; message?: string };
+
         if (err.code === 'tool_use_failed' || err.message?.includes('tool') || err.message?.includes('not supported')) {
-          const r = await c.chat.completions.create({
+          const response = await client.chat.completions.create({
             model,
-            messages: messages.map((m) => ({ role: m.role, content: m.content ?? '', name: m.name, tool_call_id: m.tool_call_id, tool_calls: m.tool_calls })),
+            messages: messages.map((message) => ({
+              role: message.role,
+              content: message.content ?? '',
+              name: message.name,
+              tool_call_id: message.tool_call_id,
+              tool_calls: message.tool_calls,
+            })),
             temperature: options?.temperature ?? 0.7,
             max_tokens: options?.maxTokens ?? 4096,
           });
-          const ch = r.choices?.[0];
+
+          const choice = response.choices?.[0];
           return {
-            content: ch?.message.content ?? '',
+            content: choice?.message.content ?? '',
             finishReason: 'stop',
-            usage: r.usage ? { promptTokens: r.usage.prompt_tokens, completionTokens: r.usage.completion_tokens, totalTokens: r.usage.total_tokens } : undefined,
+            usage: response.usage
+              ? { promptTokens: response.usage.prompt_tokens, completionTokens: response.usage.completion_tokens, totalTokens: response.usage.total_tokens }
+              : undefined,
           };
         }
+
         throw e;
       }
     },
@@ -170,6 +209,7 @@ export function ollama(config: OllamaConfig = {}): ProviderInterface {
   const getClient = async (): Promise<OllamaClient> => {
     if (client) return client;
     const { Ollama } = await import('ollama');
+
     client = new Ollama({ host }) as unknown as OllamaClient;
     return client;
   };
@@ -177,28 +217,35 @@ export function ollama(config: OllamaConfig = {}): ProviderInterface {
   return {
     name: 'ollama',
     async chat(messages: Message[], options?: ProviderOptions): Promise<ProviderResponse> {
-      const c = await getClient();
-      const z = await import('zod');
-      const tools = options?.tools?.map((t) => ({
+      const client = await getClient();
+
+      const tools = options?.tools?.map((tool) => ({
         type: 'function',
-        function: { name: t.name, description: t.description, parameters: z.toJSONSchema(t.schema) },
+        function: { name: tool.name, description: tool.description, parameters: z.toJSONSchema(tool.schema) },
       }));
-      const r = await c.chat({
+
+      const response = await client.chat({
         model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: messages.map((message) => ({ role: message.role, content: message.content })),
         options: { temperature: options?.temperature, num_predict: options?.maxTokens },
         tools,
       });
-      const tc = r.message.tool_calls?.map((t, i) => ({
+
+      const toolCalls = response.message.tool_calls?.map((t, i) => ({
         id: `call_${i}`,
         type: 'function' as const,
         function: { name: t.function.name, arguments: JSON.stringify(t.function.arguments) },
       }));
+
       return {
-        content: r.message.content,
-        toolCalls: tc,
-        finishReason: tc?.length ? 'tool_calls' : 'stop',
-        usage: { promptTokens: r.prompt_eval_count ?? 0, completionTokens: r.eval_count ?? 0, totalTokens: (r.prompt_eval_count ?? 0) + (r.eval_count ?? 0) },
+        content: response.message.content,
+        toolCalls,
+        finishReason: toolCalls?.length ? 'tool_calls' : 'stop',
+        usage: {
+          promptTokens: response.prompt_eval_count ?? 0,
+          completionTokens: response.eval_count ?? 0,
+          totalTokens: (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
+        },
       };
     },
   };

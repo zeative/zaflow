@@ -10,22 +10,22 @@ type DefineToolInput<T extends z.ZodType> = {
   handles?: MediaType[];
 };
 
-export function defineTool<T extends z.ZodType>(i: DefineToolInput<T>): ToolDefinition<T> {
+export function defineTool<T extends z.ZodType>(input: DefineToolInput<T>): ToolDefinition<T> {
   return {
-    name: i.name,
-    description: i.description,
-    schema: i.schema,
-    handler: i.handler,
-    handles: i.handles,
+    name: input.name,
+    description: input.description,
+    schema: input.schema,
+    handler: input.handler,
+    handles: input.handles,
     config: {
-      timeout: i.config?.timeout ?? 30000,
-      cacheable: i.config?.cacheable ?? false,
-      cacheTTL: i.config?.cacheTTL ?? 300000,
-      retryable: i.config?.retryable ?? true,
-      maxRetries: i.config?.maxRetries ?? 3,
-      dependsOn: i.config?.dependsOn,
-      cacheKey: i.config?.cacheKey,
-      keywords: i.config?.keywords,
+      timeout: input.config?.timeout ?? 30000,
+      cacheable: input.config?.cacheable ?? false,
+      cacheTTL: input.config?.cacheTTL ?? 300000,
+      retryable: input.config?.retryable ?? true,
+      maxRetries: input.config?.maxRetries ?? 3,
+      dependsOn: input.config?.dependsOn,
+      cacheKey: input.config?.cacheKey,
+      keywords: input.config?.keywords,
     },
   };
 }

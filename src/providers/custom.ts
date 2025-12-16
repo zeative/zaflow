@@ -21,6 +21,7 @@ export type CustomProviderConfig = {
 
 const contentToString = (content: string | ContentPart[]): string => {
   if (typeof content === 'string') return content;
+
   return content
     .map((p) => {
       if (p.type === 'text') return (p as TextPart).text;
@@ -33,21 +34,11 @@ const contentToString = (content: string | ContentPart[]): string => {
     .join(' ');
 };
 
-const formatToolSchema = (t: ToolDefinition): string => {
-  const schema = z.toJSONSchema(t.schema) as { properties?: Record<string, { type?: string; description?: string }>; required?: string[] };
-  const params = schema.properties
-    ? Object.entries(schema.properties)
-        .map(([k, v]) => `${k}: ${v.type || 'any'}${schema.required?.includes(k) ? '' : '?'}`)
-        .join(', ')
-    : '';
-  return `- ${t.name}: ${t.description} {${params}}`;
-};
-
 const buildPrompt = (msgs: Message[], tools?: ToolDefinition[]): string => {
   const base = msgs
     .map((m) => {
       const text = contentToString(m.content);
-      if (m.role === 'system') return text; // Raw system prompt
+      if (m.role === 'system') return text;
       if (m.role === 'user') return `User: ${text}`;
       if (m.role === 'assistant' && text) return `Assistant: ${text}`;
       if (m.role === 'tool') return `Tool Result: ${text}`;
@@ -58,11 +49,9 @@ const buildPrompt = (msgs: Message[], tools?: ToolDefinition[]): string => {
 
   if (!tools?.length) return base;
 
-  // Check if the last message is a tool result
   const lastMsg = msgs[msgs.length - 1];
   const isToolResult = lastMsg?.role === 'tool';
 
-  // Inject instruction into the last user message ONLY if we haven't just received a tool result
   let lastUserIdx = -1;
   for (let i = msgs.length - 1; i >= 0; i--) {
     if (msgs[i].role === 'user') {
@@ -76,7 +65,6 @@ const buildPrompt = (msgs: Message[], tools?: ToolDefinition[]): string => {
       .map((m, i) => {
         let text = contentToString(m.content);
         if (i === lastUserIdx && !isToolResult) {
-          // FORCE tool usage if we are at the start of a turn
           text += `\n\n[SYSTEM]: You MUST use a tool (like "web_search") to answer. Respond with JSON: {"tool": "...", "params": {...}}`;
         }
         if (m.role === 'system') return text;
@@ -93,7 +81,6 @@ const buildPrompt = (msgs: Message[], tools?: ToolDefinition[]): string => {
 };
 
 const parseJSON = (content: string): Record<string, unknown> | null => {
-  // Try to find JSON in markdown code blocks first
   const match = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
   if (match) {
     try {
@@ -101,7 +88,6 @@ const parseJSON = (content: string): Record<string, unknown> | null => {
     } catch {}
   }
 
-  // Fallback to finding the first valid JSON object
   let depth = 0,
     start = -1;
   for (let i = 0; i < content.length; i++) {
@@ -126,6 +112,7 @@ const extractToolCall = (content: string): ToolCall[] | undefined => {
   if (p?.tool && typeof p.tool === 'string') {
     return [{ id: `call_${Date.now()}`, type: 'function', function: { name: p.tool, arguments: JSON.stringify(p.params || {}) } }];
   }
+
   return undefined;
 };
 
