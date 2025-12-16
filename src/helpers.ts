@@ -1,15 +1,14 @@
 import type { z } from 'zod';
-import type { ToolDefinition, Tool as ITool } from './types/tool';
-import type { AgentDefinition, Agent as IAgent } from './types/agent';
-import type { ProviderDefinition, Provider } from './types/provider';
-import type { StorageDefinition, StoragePlugin } from './types/storage';
-import { Tool } from './core/Tool';
 import { Agent } from './core/Agent';
+import { Tool } from './core/Tool';
+import { defineStorage } from './plugins/storage/StoragePlugin';
+import { CustomProvider } from './providers/CustomProvider';
 import { GroqProvider } from './providers/GroqProvider';
 import { OllamaProvider } from './providers/OllamaProvider';
 import { OpenAIProvider } from './providers/OpenAIProvider';
-import { CustomProvider } from './providers/CustomProvider';
-import { defineStorage } from './plugins/storage/StoragePlugin';
+import type { AgentDefinition, Agent as IAgent } from './types/agent';
+import type { Provider, ProviderDefinition } from './types/provider';
+import type { Tool as ITool, ToolDefinition } from './types/tool';
 
 /**
  * Define a tool

@@ -1,6 +1,6 @@
-import type { Agent as IAgent, AgentDefinition, AgentCapability } from '../types/agent';
-import type { Tool } from '../types/tool';
+import type { AgentCapability, AgentDefinition, Agent as IAgent } from '../types/agent';
 import type { ModelConfig } from '../types/core';
+import type { Tool } from '../types/tool';
 
 /**
  * Agent implementation

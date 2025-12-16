@@ -1,5 +1,5 @@
 import { promises as fs } from 'fs';
-import { join, dirname } from 'path';
+import { dirname, join } from 'path';
 import type { StoragePlugin } from '../../types/storage';
 
 export interface FileStorageOptions {

@@ -1,9 +1,4 @@
 /**
- * Basic token counting (simple approximation)
- * For production use, consider using tiktoken for accurate counting
- */
-
-/**
  * Estimate token count for text
  * Approximation: ~4 characters per token on average
  */

@@ -1,5 +1,5 @@
-import type { Provider as IProvider, ProviderMessage, ProviderResponse } from '../types/provider';
 import type { ModelConfig } from '../types/core';
+import type { Provider as IProvider, ProviderMessage, ProviderResponse } from '../types/provider';
 import type { Tool } from '../types/tool';
 
 /**

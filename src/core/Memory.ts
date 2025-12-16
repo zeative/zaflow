@@ -1,6 +1,6 @@
-import type { SharedMemory } from '../types/tool';
-import type { Hooks } from '../types/hooks';
 import { MemoryStorage } from '../plugins/storage/MemoryStorage';
+import type { Hooks } from '../types/hooks';
+import type { SharedMemory } from '../types/tool';
 
 /**
  * Shared memory pool for inter-agent communication

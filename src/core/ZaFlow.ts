@@ -1,18 +1,16 @@
-import type { ZaFlowOptions, ZaFlowResponse, RunOptions, StreamOptions, Message, ExecutionMode, ModelConfig, TokenUsage } from '../types/core';
-import type { Provider, ProviderMessage, ToolCall } from '../types/provider';
-import type { Tool } from '../types/tool';
-import type { Agent } from '../types/agent';
-import type { ToolContext } from '../types/tool';
-import type { Hooks } from '../types/hooks';
-import type { StoragePlugin } from '../types/storage';
-import { ContextManager } from './Context';
-import { SharedMemoryPool } from './Memory';
 import { MemoryStorage } from '../plugins/storage/MemoryStorage';
-import { ResponseFormatter } from '../protocol/ResponseFormatter';
-import { ToolCallParser } from '../protocol/ToolCallParser';
 import { AgentDelegationFormatter } from '../protocol/AgentDelegation';
+import { ToolCallParser } from '../protocol/ToolCallParser';
+import type { Agent } from '../types/agent';
+import type { ExecutionMode, Message, ModelConfig, RunOptions, StreamOptions, TokenUsage, ZaFlowOptions, ZaFlowResponse } from '../types/core';
+import type { Hooks } from '../types/hooks';
+import type { Provider, ProviderMessage, ToolCall } from '../types/provider';
+import type { StoragePlugin } from '../types/storage';
+import type { Tool, ToolContext } from '../types/tool';
 import { generateExecutionId } from '../utils/id';
 import { simulateStreaming } from '../utils/streaming';
+import { ContextManager } from './Context';
+import { SharedMemoryPool } from './Memory';
 
 /**
  * Main ZaFlow class for orchestrating AI workflows
