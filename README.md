@@ -58,9 +58,7 @@
 
 ## 🚀 Overview
 
-> **🚧 BETA VERSION** — This library is currently in active development and not yet recommended for production use. APIs may change without notice. Use at your own risk and feel free to report issues or contribute!
-
-ZaFlow solves the complexity of building AI agent systems by providing a high-level, opinionated API. It is built for developers who need to create chatbots, autonomous agents, or AI-powered workflows without getting bogged down in protocol details.
+> ZaFlow solves the complexity of building AI agent systems by providing a high-level, opinionated API. It is built for developers who need to create chatbots, autonomous agents, or AI-powered workflows without getting bogged down in protocol details.
 
 Targeting **Node.js** and **TypeScript** developers, ZaFlow integrates essential features like multi-provider support, tool calling, agent delegation, and flow control out of the box.
 
