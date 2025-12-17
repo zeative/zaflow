@@ -18,11 +18,6 @@
       "import": "./dist/plugins/index.mjs"
     }
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
   "author": "zaadevofc",
   "repository": {
     "url": "git+https://github.com/zeative/zaflow.git"
