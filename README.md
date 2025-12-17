@@ -40,7 +40,6 @@
 [🎮 Execution Modes](#-execution-modes) &nbsp;&nbsp;•&nbsp;&nbsp;
 [🛠️ Tools](#%EF%B8%8F-tools) &nbsp;&nbsp;•&nbsp;&nbsp;
 [🤖 Agents](#-agents) &nbsp;&nbsp;•&nbsp;&nbsp;
-[🔄 Flow Control](#-flow-control) &nbsp;&nbsp;•&nbsp;&nbsp;
 [📷 Multimodal](#-multimodal-support) &nbsp;&nbsp;•&nbsp;&nbsp;
 [🎯 Structured Output](#-structured-output) &nbsp;&nbsp;•&nbsp;&nbsp;
 [🤝 Contributing](#-contributing)
@@ -67,15 +66,15 @@ Targeting **Node.js** and **TypeScript** developers, ZaFlow integrates essential
 
 ## ✨ Features
 
-- 🪶 **Lightweight** - Minimal dependencies, fast startup, no bloat
-- 🔌 **Multi-Provider** - OpenAI, Groq, Ollama, or custom provider
-- 🤖 **3 Execution Modes** - Single, Agentic, Autonomous
-- 🛠️ **Tools & Agents** - Define tools with Zod schema validation
-- 🎯 **Flow Control** - Steps, conditions, loops, parallel execution
-- 📷 **Multimodal** - Image, audio, file support with smart media reference system
-- 📝 **Output Format** - Auto, JSON, WhatsApp formatting
-- 🔄 **Agent Delegation** - Autonomous agent-to-agent communication
-- 🧩 **Structured Output** - Type-safe responses with Zod schema validation
+- ✅ **Lightweight** - Minimal dependencies, fast startup, no bloat
+- ✅ **Multi-Provider** - OpenAI, Groq, Ollama, or custom provider
+- ✅ **3 Execution Modes** - Single, Agentic, Autonomous
+- ✅ **Tools & Agents** - Define tools with Zod schema validation
+- ✅ **Flow Control** - Steps, conditions, loops, parallel execution
+- ✅ **Multimodal** - Image, audio, file support with smart media reference system
+- ✅ **Output Format** - Auto, JSON, WhatsApp formatting
+- ✅ **Agent Delegation** - Autonomous agent-to-agent communication
+- ✅ **Structured Output** - Type-safe responses with Zod schema validation
 
 ## 🎨 Concepts & Architecture
 
@@ -121,24 +120,38 @@ npm install ollama
 Here is a minimal example to get your AI agent running:
 
 ```typescript
-import { ZaFlow, groq } from 'zaflow';
+import { ZaFlow, defineProvider } from 'zaflow';
+
+const GroqProvider = defineProvider({
+  type: 'groq',
+  apiKey: 'your-api-key',
+  defaultModel: 'moonshotai/kimi-k2-instruct',
+});
 
 const zaflow = new ZaFlow({
-  provider: groq({ apiKey: 'your-api-key' }),
+  mode: 'single',
+  provider: GroqProvider,
 });
 
 const result = await zaflow.run('Explain quantum computing in one sentence');
-console.log(result.output);
+console.log(result.content);
 ```
 
 ## 🛠️ Configuration
 
 The `ZaFlow` constructor accepts a configuration object:
 
-| Option     | Type                | Description                    |
-| :--------- | :------------------ | :----------------------------- |
-| `provider` | `ProviderInterface` | Required. AI provider to use.  |
-| `cost`     | `CostConfig`        | Optional. Token/cost tracking. |
+| Option          | Type            | Required | Description                                       |
+| :-------------- | :-------------- | :------- | :------------------------------------------------ |
+| `mode`          | `ExecutionMode` | ✅       | Execution mode: `single`, `agentic`, `autonomous` |
+| `provider`      | `Provider`      | ✅       | AI provider instance                              |
+| `agents`        | `Agent[]`       | ❌       | Sub-agents (for autonomous mode)                  |
+| `tools`         | `Tool[]`        | ❌       | Tools (for agentic/autonomous mode)               |
+| `config`        | `ModelConfig`   | ❌       | Model configuration                               |
+| `historyConfig` | `HistoryConfig` | ❌       | History management                                |
+| `storage`       | `StoragePlugin` | ❌       | Storage plugin                                    |
+| `hooks`         | `Hooks`         | ❌       | Event hooks                                       |
+| `systemPrompt`  | `string`        | ❌       | Custom system prompt                              |
 
 ## 💡 Advanced Usage
 
@@ -147,12 +160,8 @@ The `ZaFlow` constructor accepts a configuration object:
 You can define tools with Zod schema validation for type-safe AI function calling.
 
 ```typescript
-import { ZaFlow, groq, defineTool } from 'zaflow';
+import { ZaFlow, defineProvider, defineTool } from 'zaflow';
 import { z } from 'zod';
-
-const zaflow = new ZaFlow({
-  provider: groq({ apiKey: 'xxx' }),
-});
 
 const calculator = defineTool({
   name: 'calculator',
@@ -160,12 +169,17 @@ const calculator = defineTool({
   schema: z.object({
     expression: z.string().describe('Math expression like "2 + 2"'),
   }),
-  handler: ({ expression }) => eval(expression),
+  execute: ({ expression }) => eval(expression),
 });
 
-zaflow.registerTools([calculator]);
+const zaflow = new ZaFlow({
+  mode: 'agentic',
+  // if you want to use other provider
+  // provider: GroqProvider,
+  tools: [calculator],
+});
 
-const result = await zaflow.run('What is 15 * 7 + 23?', { mode: 'agentic' });
+const result = await zaflow.run('What is 15 * 7 + 23?');
 ```
 
 ## 🔌 Providers
@@ -175,55 +189,67 @@ const result = await zaflow.run('What is 15 * 7 + 23?', { mode: 'agentic' });
 ### OpenAI
 
 ```typescript
-import { openai } from 'zaflow';
+import { defineProvider } from 'zaflow';
 
-const provider = openai({
+const provider = defineProvider({
+  type: 'openai',
   apiKey: 'sk-xxx',
-  model: 'gpt-4o-mini',
+  defaultModel: 'gpt-4o-mini',
 });
 ```
 
 ### Groq
 
 ```typescript
-import { groq } from 'zaflow';
+import { defineProvider } from 'zaflow';
 
-const provider = groq({
+const provider = defineProvider({
+  type: 'groq',
   apiKey: 'gsk_xxx',
-  model: 'llama-3.3-70b-versatile',
+  defaultModel: 'llama-3.3-70b-versatile',
 });
 ```
 
 ### Ollama
 
 ```typescript
-import { ollama } from 'zaflow';
+import { defineProvider } from 'zaflow';
 
-const provider = ollama({
-  host: 'http://localhost:11434',
-  model: 'llama3.2',
+const provider = defineProvider({
+  type: 'ollama',
+  baseURL: 'http://localhost:11434',
+  defaultModel: 'llama3.2',
 });
 ```
 
 ### Custom Provider
 
 ```typescript
-import { createProvider } from 'zaflow';
+import { defineProvider } from 'zaflow';
 
 // with your external AI API
-const customAI = createProvider({
+const customAI = defineProvider({
+  type: 'custom',
   name: 'my-ai',
-  handler: async ({ prompt, messages }) => {
+  adapter: async (messages, config) => {
     const res = await fetch('https://my-api.com/chat', {
       method: 'POST',
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ messages }),
     });
+
     const json = await res.json();
-    return json.response;
+    return {
+      content: json.response,
+      usage: {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+      },
+    };
   },
 });
 
-const zaflow = new ZaFlow({ provider: customAI });
+const zaflow = new ZaFlow({ mode: 'single', provider: customAI });
 ```
 
 > ⚠️ **AI Model Quality Affects Tool Calling & Agent Delegation**
@@ -253,18 +279,26 @@ const zaflow = new ZaFlow({ provider: customAI });
 One chat call without tools. Fastest and most token-efficient.
 
 ```typescript
-const result = await zaflow.run('Hello!', { mode: 'single' });
+const zaflow = new ZaFlow({
+  mode: 'single',
+  provider: GroqProvider,
+});
+
+const result = await zaflow.run('Hello!');
 ```
 
 ### Agentic Mode
 
-AI can automatically call tools when needed. **(Default)**
+AI can automatically call tools when needed.
 
 ```typescript
-const result = await zaflow.run('Search weather in Jakarta', {
+const zaflow = new ZaFlow({
   mode: 'agentic',
-  maxToolCalls: 5,
+  provider: GroqProvider,
+  tools: [weatherTool],
 });
+
+const result = await zaflow.run('Search weather in Jakarta');
 ```
 
 ### Autonomous Mode
@@ -272,10 +306,14 @@ const result = await zaflow.run('Search weather in Jakarta', {
 AI can call tools AND delegate to other agents.
 
 ```typescript
-const result = await zaflow.run('Analyze this image and generate a poem', {
+const zaflow = new ZaFlow({
   mode: 'autonomous',
-  maxIterations: 10,
+  provider: GroqProvider,
+  agents: [visionAgent, poetAgent],
+  tools: [analysisTool],
 });
+
+const result = await zaflow.run('Analyze this image and generate a poem');
 ```
 
 ## 🛠️ Tools
@@ -295,7 +333,7 @@ const weatherTool = defineTool({
     city: z.string().describe('City name'),
     unit: z.enum(['celsius', 'fahrenheit']).optional(),
   }),
-  handler: async ({ city, unit = 'celsius' }) => {
+  execute: async ({ city, unit = 'celsius' }) => {
     // const data = await fetchWeatherAPI...
     return `Currently in ${city} is 20°`;
   },
@@ -306,13 +344,15 @@ const weatherTool = defineTool({
 
 ```typescript
 const tool = defineTool({
-  ...,
-  config: {
-    timeout: 10000,
-    cacheable: true,
-    cacheTTL: 300000,
-    retryable: true,
-    maxRetries: 3,
+  name: 'my_tool',
+  description: 'My tool description',
+  schema: z.object({ input: z.string() }),
+  execute: async ({ input }) => input,
+  cache: 300000, // TTL in ms, or true for default
+  retry: {
+    maxAttempts: 3,
+    delayMs: 1000,
+    backoff: 'exponential',
   },
 });
 ```
@@ -323,9 +363,9 @@ const tool = defineTool({
 const imageAnalyzer = defineTool({
   name: 'analyze_image',
   description: 'Analyze image content',
-  schema: z.object({ media: z.string() }),
-  handles: ['image', 'anything...'],
-  handler: async ({ media }) => {
+  schema: z.object({ imageUrl: z.string() }),
+  handles: ['image'],
+  execute: async ({ imageUrl }) => {
     // const data = await fetchAIImageAnalyzer...
     return 'The picture shows the sun rising!';
   },
@@ -339,24 +379,24 @@ const imageAnalyzer = defineTool({
 ### Defining an Agent
 
 ```typescript
-import { defineAgent, groq } from 'zaflow';
-
-const ai = groq({ apiKey: 'xxx' }); // you can use other
+import { defineAgent, defineProvider } from 'zaflow';
 
 const codeReviewer = defineAgent({
   name: 'Code Reviewer',
-  provider: ai,
+  role: 'Expert code reviewer',
+  systemPrompt: `You are an expert code reviewer. Review code for bugs, security issues, and best practices.`,
+  provider: GroqProvider,
   model: 'llama-3.3-70b-versatile',
-  prompt: `You are an expert code reviewer. Review code for bugs, security issues, and best practices.`,
-  temperature: 0.3,
+  config: { temperature: 0.3 },
   tools: [lintTool, securityScanTool],
 });
 
 const contentWriter = defineAgent({
   name: 'Content Writer',
-  provider: ai,
-  prompt: 'You are a creative content writer.',
-  temperature: 0.8,
+  role: 'Creative content writer',
+  systemPrompt: 'You are a creative content writer.',
+  provider: GroqProvider,
+  config: { temperature: 0.8 },
 });
 ```
 
@@ -365,85 +405,21 @@ const contentWriter = defineAgent({
 ```typescript
 const visionAgent = defineAgent({
   name: 'Vision Analyzer',
-  provider: ai,
-  needsMedia: ['image'],
-  prompt: 'You analyze images and describe their content.',
+  role: 'Image analysis expert',
+  systemPrompt: 'You analyze images and describe their content.',
+  provider: GroqProvider,
+  // Tools that handle media will automatically be available
 });
 ```
 
 ### Register Agents
 
 ```typescript
-zaflow.registerAgents([codeReviewer, contentWriter, visionAgent]);
-```
-
-## 🔄 Flow Control
-
-> **Quick Jump:** [Steps](#steps) · [Conditional](#conditional-flow) · [Loop](#loop) · [Parallel](#parallel-execution)
-
-### Steps
-
-```typescript
-zaflow
-  .step('fetch', async (ctx) => {
-    return await fetch('https://api.example.com/data').then((r) => r.json());
-  })
-  .step('process', async (ctx) => {
-    const data = ctx.previous;
-    return processData(data);
-  })
-  .step('respond', async (ctx) => {
-    return await ctx.ai(`Summarize: ${JSON.stringify(ctx.previous)}`);
-  });
-```
-
-### Conditional Flow
-
-```typescript
-zaflow
-  .step('classify', async (ctx) => {
-    return await ctx.ai('Classify this as positive or negative: ' + ctx.input);
-  })
-  .if((ctx) => ctx.previous.includes('positive'))
-  .then([ZaFlow.step('celebrate', async () => '🎉 Great feedback!')])
-  .else([
-    ZaFlow.step('improve', async (ctx) => {
-      return await ctx.ai('Suggest improvements for: ' + ctx.input);
-    }),
-  ])
-  .endif();
-```
-
-### Loop
-
-```typescript
-zaflow.loop({
-  condition: (ctx) => ctx.get('retryCount', 0) < 3,
-  maxIterations: 5,
-  steps: [
-    zaflow.step('attempt', async (ctx) => {
-      const count = ctx.get('retryCount', 0);
-      ctx.set('retryCount', count + 1);
-
-      return await tryOperation();
-    }),
-  ],
+const zaflow = new ZaFlow({
+  mode: 'autonomous',
+  provider: GroqProvider,
+  agents: [codeReviewer, contentWriter, visionAgent],
 });
-```
-
-### Parallel Execution
-
-```typescript
-zaflow
-  .parallel([
-    ZaFlow.step('task1', async () => await fetchFromAPI1()),
-    ZaFlow.step('task2', async () => await fetchFromAPI2()),
-    ZaFlow.step('task3', async () => await fetchFromAPI3()),
-  ])
-  .step('combine', async (ctx) => {
-    const [result1, result2, result3] = ctx.parallel;
-    return combineResults(result1, result2, result3);
-  });
 ```
 
 ## 📷 Multimodal Support
@@ -463,7 +439,7 @@ const messages = [
   ])
 ];
 
-const result = await zaflow.run(messages, { mode: 'autonomous' });
+const result = await zaflow.run(messages);
 ```
 
 ### Image from Base64
@@ -498,29 +474,17 @@ image(massive20MBBase64);
 // → Media is stripped, saving tokens!
 ```
 
-## 📝 Output Formatting
-
-```typescript
-// Auto (default) - raw output
-const result = await zaflow.run(input, { format: 'auto' });
-
-// JSON - parse/wrap as JSON
-const result = await zaflow.run(input, { format: 'json' });
-
-// WhatsApp - convert markdown to WhatsApp format
-const result = await zaflow.run(input, { format: 'whatsapp' });
-```
-
 ## 🎯 Structured Output
 
 Force AI to respond in a specific JSON structure with **Zod schema validation**:
 
 ```typescript
-import { ZaFlow, groq } from 'zaflow';
+import { ZaFlow, defineProvider } from 'zaflow';
 import { z } from 'zod';
 
 const zaflow = new ZaFlow({
-  provider: groq({ apiKey: 'xxx' }),
+  mode: 'single',
+  provider: GroqProvider,
 });
 
 // Define your expected response schema
@@ -531,13 +495,13 @@ const personSchema = z.object({
   skills: z.array(z.string()),
 });
 
-const result = await zaflow.run('Extract info: John Doe is a 28 year old software engineer skilled in TypeScript and React', { schema: personSchema });
+const result = await zaflow.run('Extract info: John Doe is a 28 year old software engineer skilled in TypeScript and React', {
+  schema: personSchema,
+});
 
-// result.output  → raw JSON string
-// result.parsed  → typed & validated object!
-console.log(result.parsed?.name); // "John Doe" (string)
-console.log(result.parsed?.age); // 28 (number)
-console.log(result.parsed?.skills); // ["TypeScript", "React"]
+// result.content  → response string (may contain JSON)
+// To get validated data, you need to parse result.content based on schema
+console.log(result.content); // Raw response
 ```
 
 ### Complex Schema Example
@@ -559,58 +523,21 @@ const result = await zaflow.run('Analyze this article: ...', {
 });
 ```
 
-> **Note:** If the AI response doesn't match the schema, `result.parsed` will be `undefined`. Always check before using.
-
-## 🧠 ExecutionContext API
-
-```typescript
-zaflow.step('myStep', async (ctx) => {
-  // Input & Output
-  ctx.input; // Original input
-  ctx.previous; // Previous step output
-  ctx.parallel; // Array of parallel results
-
-  // State Management
-  ctx.set('key', value); // Store value
-  ctx.get('key', defaultValue); // Retrieve value
-  ctx.has('key'); // Check existence
-
-  // Messages
-  ctx.messages; // Full conversation history
-  ctx.addMessage('user', 'Hello');
-
-  // AI Helper
-  const response = await ctx.ai('Your prompt here');
-  const response = await ctx.ai({
-    prompt: 'Complex prompt',
-    model: 'gpt-4',
-    temperature: 0.7,
-    tools: [myTool],
-  });
-
-  // Stats
-  ctx.tokens; // Token count
-  ctx.cost; // Estimated cost
-});
-```
+> **Note:** The `schema` option guides the AI to output in the specified structure, but you'll need to parse `result.content` to get typed data.
 
 ## 🎯 Execution Options
 
 ```typescript
 const result = await zaflow.run(input, {
-  mode: 'autonomous',
-  format: 'whatsapp',
-  maxIterations: 10,
-  maxToolCalls: 3,
-  maxTokens: 4096,
-  timeout: 30000,
-  signal: abortController.signal,
-  schema: responseSchema,
-  systemPrompt: 'You are a helpful assistant.',
-
-  onAgentEvent: (event) => {
-    console.log(`[${event.type}] ${event.agent || event.tool}`);
+  config: {
+    maxTokens: 4096,
+    temperature: 0.7,
+    topP: 0.9,
   },
+  schema: responseSchema,
+  detailed: true,
+  persistContext: false,
+  systemPrompt: 'You are a helpful assistant.',
 });
 ```
 
@@ -635,32 +562,64 @@ Gunakan emoji sesekali untuk membuat percakapan lebih hidup.`,
 ```typescript
 const result = await zaflow.run(input);
 
-result.output; // Final response string
-result.thinking; // AI's thinking process (if <think> tags used)
-result.messages; // Full conversation history
-result.steps; // Step-by-step execution results
-result.events; // Agent/tool call events
-result.duration; // Total execution time (ms)
-result.stats; // Usage statistics
-result.stats.tokens; // Total tokens used
-result.stats.cost; // Estimated cost
-result.stats.agentCalls; // Agent call counts
-result.stats.toolCalls; // Tool call counts
+result.content; // Response content (string)
+result.metadata; // Execution metadata (if detailed: true)
+result.metadata?.tokensUsed; // Token usage { prompt, completion, total }
+result.metadata?.toolsCalled; // Array of tool names called
+result.metadata?.agentsCalled; // Array of agent names called
+result.metadata?.executionTime; // Execution time in milliseconds
+result.metadata?.model; // Model name used
+result.error; // Error object (if any)
 ```
 
 ## 📋 TypeScript Types
 
 ```typescript
 import type {
-  ZaFlowConfig,
-  ProviderInterface,
-  ToolDefinition,
-  AgentDefinition,
-  ExecutionContext,
-  ExecutionOptions,
-  ExecutionResult,
+  ZaFlowOptions,
+  ZaFlowResponse,
+  RunOptions,
+  StreamOptions,
+  ModelConfig,
+  HistoryConfig,
   Message,
-  StepDefinition,
+  QuotedMessage,
+  ExecutionMode,
+  TokenUsage,
+  ExecutionMetadata,
+  ErrorResponse,
+  Provider,
+  ProviderDefinition,
+  ProviderAdapter,
+  ProviderResponse,
+  ProviderMessage,
+  ToolCall,
+  RateLimit,
+  Tool,
+  ToolDefinition,
+  ToolContext,
+  SharedMemory,
+  StorageInterface,
+  Agent,
+  AgentDefinition,
+  AgentCapability,
+  AgentConstraints,
+  Hooks,
+  ErrorContext,
+  StoragePlugin,
+  StorageAdapter,
+  StorageDefinition,
+  OptimizationConfig,
+  RetryConfig,
+  CacheConfig,
+  TokenBudget,
+  ContentPart,
+  TextPart,
+  ImagePart,
+  AudioPart,
+  FilePart,
+  MediaType,
+  QuoteConfig,
 } from 'zaflow';
 ```
 
