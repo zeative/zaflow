@@ -30,8 +30,9 @@
   "scripts": {
     "dev": "bun run examples/test.ts",
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "r:patch": "npm run build && npm version patch && npm publish",
+    "r:minor": "npm run build && npm version minor && npm publish",
+    "r:major": "npm run build && npm version major && npm publish"
   },
   "keywords": [
     "ai",
