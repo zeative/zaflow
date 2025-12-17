@@ -56,3 +56,63 @@ export function defineProvider(definition: ProviderDefinition): Provider {
  * Export storage definition helper
  */
 export { defineStorage };
+
+// ===============================================
+// 🔥 MULTIMODAL CONTENT BUILDERS
+// ===============================================
+
+import type { ContentPart, TextPart, ImagePart, AudioPart, FilePart } from './types/content';
+import type { Message } from './types/core';
+
+/**
+ * Create a text content part
+ */
+export function text(content: string): TextPart {
+  return { type: 'text', text: content };
+}
+
+/**
+ * Create an image content part from URL
+ */
+export function image(url: string, detail?: 'low' | 'high' | 'auto'): ImagePart {
+  return { type: 'image_url', image_url: { url, detail } };
+}
+
+/**
+ * Create an image content part from base64
+ */
+export function imageBase64(base64: string, mimeType: string = 'image/png', detail?: 'low' | 'high' | 'auto'): ImagePart {
+  return { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}`, detail } };
+}
+
+/**
+ * Create an audio content part
+ */
+export function audio(base64Data: string, format?: 'mp3' | 'wav' | 'ogg'): AudioPart {
+  return { type: 'audio', audio: { data: base64Data, format } };
+}
+
+/**
+ * Create a file content part
+ */
+export function file(base64Data: string, mimeType: string, filename?: string): FilePart {
+  return { type: 'file', file: { data: base64Data, mimeType, filename } };
+}
+
+/**
+ * Message helpers
+ */
+export const msg = {
+  user(content: string | ContentPart[]): Message {
+    return { role: 'user', content };
+  },
+  system(content: string): Message {
+    return { role: 'system', content };
+  },
+  assistant(content: string): Message {
+    return { role: 'assistant', content };
+  },
+  tool(content: string, name: string, toolCallId: string): Message {
+    return { role: 'tool', content, name, toolCallId };
+  },
+};

@@ -5,6 +5,9 @@ export { default as ZaFlow } from './core/ZaFlow';
 // Helper functions
 export { defineTool, defineAgent, defineProvider, defineStorage } from './helpers';
 
+// 🔥 Multimodal helpers
+export { text, image, imageBase64, audio, file, msg } from './helpers';
+
 // Utils functions
 export * from './utils';
 
@@ -60,3 +63,6 @@ export type {
   CacheConfig,
   TokenBudget,
 } from './types';
+
+// 🔥 Multimodal content types
+export type { ContentPart, TextPart, ImagePart, AudioPart, FilePart, MediaType } from './types/content';

@@ -7,10 +7,13 @@ import type { Hooks } from '../types/hooks';
 import type { Provider, ProviderMessage, ToolCall } from '../types/provider';
 import type { StoragePlugin } from '../types/storage';
 import type { Tool, ToolContext } from '../types/tool';
+import type { ContentPart } from '../types/content';
+import { getTextContent, hasMedia, extractMediaParts } from '../types/content';
 import { generateExecutionId } from '../utils/id';
 import { simulateStreaming } from '../utils/streaming';
 import { ContextManager } from './Context';
 import { SharedMemoryPool } from './Memory';
+import { MediaProcessor } from './MediaProcessor';
 
 /**
  * Main ZaFlow class for orchestrating AI workflows
@@ -28,6 +31,7 @@ export default class ZaFlow<TContext = any> {
   private history: Message[] = [];
   private systemPrompt?: string;
   private prompts: Array<{ prompt: string; context?: any }> = [];
+  private mediaProcessor: MediaProcessor; // 🔥 Genius Media Processor
 
   constructor(options: ZaFlowOptions<TContext>) {
     this.mode = options.mode;
@@ -41,6 +45,7 @@ export default class ZaFlow<TContext = any> {
     this.contextManager = new ContextManager<TContext>(this.hooks);
     this.sharedMemory = new SharedMemoryPool(this.hooks);
     this.storage = options.storage || new MemoryStorage();
+    this.mediaProcessor = new MediaProcessor(this.tools); // 🔥 Initialize processor
   }
 
   addContext(context: Partial<TContext>): void {
@@ -105,25 +110,60 @@ export default class ZaFlow<TContext = any> {
       .join('\n\n');
   }
 
-  async run(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
+  async run(message: string | Message | ContentPart[], options?: RunOptions): Promise<ZaFlowResponse> {
     const startTime = Date.now();
     const executionId = generateExecutionId();
 
     try {
-      this.hooks?.onStart?.(message);
-      this.history.push({ role: 'user', content: message });
+      // 🔥 GENIUS MULTIMODAL SUPPORT
+      let userMessage: Message;
 
+      if (typeof message === 'string') {
+        userMessage = { role: 'user', content: message };
+      } else if (Array.isArray(message)) {
+        userMessage = { role: 'user', content: message };
+      } else {
+        userMessage = message;
+      }
+
+      this.hooks?.onStart?.(getTextContent(userMessage.content));
+      this.history.push(userMessage);
+
+      // 🔥 AUTO-DETECT AND PROCESS MEDIA
+      if (hasMedia(userMessage.content)) {
+        const mediaParts = extractMediaParts(userMessage.content);
+        console.log(`[ZaFlow] 🎯 Auto-detected ${mediaParts.length} media item(s)`);
+
+        const toolContext: ToolContext<TContext> = {
+          userContext: this.getContext(),
+          sharedMemory: this.sharedMemory,
+          agentName: 'main',
+          conversationHistory: this.history,
+          metadata: { executionId, timestamp: Date.now(), mode: this.mode },
+          storage: this.storage,
+        };
+
+        const { summary } = await this.mediaProcessor.process(mediaParts, toolContext);
+
+        if (summary) {
+          // Inject analysis results into history
+          this.history.push({ role: 'system', content: summary });
+          console.log('[ZaFlow] ✅ Media processing complete, results injected into context');
+        }
+      }
+
+      const textMessage = getTextContent(userMessage.content);
       let response: ZaFlowResponse;
 
       switch (this.mode) {
         case 'single':
-          response = await this.runSingle(message, options);
+          response = await this.runSingle(textMessage, options);
           break;
         case 'agentic':
-          response = await this.runAgentic(message, options);
+          response = await this.runAgentic(textMessage, options);
           break;
         case 'autonomous':
-          response = await this.runAutonomous(message, options);
+          response = await this.runAutonomous(textMessage, options);
           break;
         default:
           throw new Error(`Unknown mode: ${this.mode}`);
@@ -144,7 +184,8 @@ export default class ZaFlow<TContext = any> {
       return response;
     } catch (error) {
       const err = error as Error;
-      this.hooks?.onError?.(err, { phase: 'orchestration', input: message });
+      const errorInput = typeof message === 'string' ? message : getTextContent(Array.isArray(message) ? message : message.content);
+      this.hooks?.onError?.(err, { phase: 'orchestration', input: errorInput });
 
       return {
         content: '',
@@ -157,9 +198,10 @@ export default class ZaFlow<TContext = any> {
     }
   }
 
-  async *stream(message: string, options?: StreamOptions): AsyncIterableIterator<string> {
-    this.hooks?.onStart?.(message);
-    this.history.push({ role: 'user', content: message });
+  async *stream(message: string | Message | ContentPart[], options?: StreamOptions): AsyncIterableIterator<string> {
+    const textMessage = typeof message === 'string' ? message : getTextContent(Array.isArray(message) ? message : message.content);
+    this.hooks?.onStart?.(textMessage);
+    this.history.push({ role: 'user', content: typeof message === 'string' ? message : Array.isArray(message) ? message : message.content });
 
     // Complex modes (AGENTIC, AUTONOMOUS) need full execution before streaming
     // because tool calling and agent delegation can't be truly streamed
@@ -721,9 +763,12 @@ REMEMBER: If there's a tool that can help, you MUST use it. This is not optional
     messages.push({ role: 'system', content: baseSystemPrompt });
 
     for (const msg of this.history) {
+      // Convert multimodal content to string for providers that don't support it
+      const content = typeof msg.content === 'string' ? msg.content : getTextContent(msg.content);
+
       messages.push({
         role: msg.role,
-        content: msg.content,
+        content,
         name: msg.name,
         toolCallId: msg.toolCallId,
       });

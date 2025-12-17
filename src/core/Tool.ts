@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { zodToJsonSchema } from '../protocol/SchemaConverter';
+import type { MediaType } from '../types/content';
 import type { RetryConfig } from '../types/optimization';
 import type { Tool as ITool, ToolContext, ToolDefinition } from '../types/tool';
 import { retryWithBackoff } from '../utils/retry';
@@ -15,6 +16,8 @@ export class Tool<TSchema extends z.ZodSchema = any> implements ITool<TSchema> {
   execute: (args: z.infer<TSchema>, context: ToolContext) => Promise<any>;
   cache?: boolean | number;
   retry?: RetryConfig;
+  handles?: MediaType[]; // 🔥 Multimodal support
+  priority?: number; // 🔥 Tool priority
 
   // Internal cache
   private cacheStore: Map<string, { value: any; expiry?: number }> = new Map();
@@ -28,6 +31,8 @@ export class Tool<TSchema extends z.ZodSchema = any> implements ITool<TSchema> {
     };
     this.cache = definition.cache;
     this.retry = definition.retry;
+    this.handles = definition.handles; // 🔥
+    this.priority = definition.priority; // 🔥
   }
 
   /**

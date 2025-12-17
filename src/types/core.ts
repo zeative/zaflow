@@ -5,6 +5,7 @@ import type { Provider } from './provider';
 import type { Hooks } from './hooks';
 import type { StoragePlugin } from './storage';
 import type { OptimizationConfig, RetryConfig } from './optimization';
+import type { ContentPart } from './content';
 
 /**
  * Message role types
@@ -12,11 +13,11 @@ import type { OptimizationConfig, RetryConfig } from './optimization';
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 /**
- * Message structure
+ * Message structure with multimodal support
  */
 export interface Message {
   role: MessageRole;
-  content: string;
+  content: string | ContentPart[]; // 🔥 Multimodal support
   name?: string; // For tool messages
   toolCallId?: string; // For tool responses
 }

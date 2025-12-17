@@ -23,7 +23,7 @@
     "README.md",
     "LICENSE"
   ],
-  "author": "Zeative Labs",
+  "author": "zaadevofc",
   "repository": {
     "url": "git+https://github.com/zeative/zaflow.git"
   },
@@ -67,7 +67,9 @@
   },
   "dependencies": {
     "compromise": "^14.14.5",
+    "lru-cache": "^11.0.0",
     "nanoid": "^5.0.4",
+    "object-hash": "^3.0.0",
     "p-retry": "^6.2.0",
     "string-similarity": "^4.0.4"
   },

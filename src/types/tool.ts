@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { Message } from './core';
 import type { RetryConfig } from './optimization';
+import type { MediaType } from './content';
 
 /**
  * Storage interface for tool context
@@ -46,7 +47,7 @@ export interface ToolContext<TContext = any> {
 }
 
 /**
- * Tool definition
+ * Tool definition with multimodal support
  */
 export interface ToolDefinition<TSchema extends z.ZodSchema = any> {
   /** Tool name (unique identifier) */
@@ -61,6 +62,10 @@ export interface ToolDefinition<TSchema extends z.ZodSchema = any> {
   cache?: boolean | number; // true or TTL in ms
   /** Optional: Retry config */
   retry?: RetryConfig;
+  /** 🔥 Media types this tool can handle (for auto-detection) */
+  handles?: MediaType[];
+  /** 🔥 Priority for conflict resolution (higher = preferred) */
+  priority?: number;
 }
 
 /**
@@ -73,6 +78,8 @@ export interface Tool<TSchema extends z.ZodSchema = any> {
   execute: (args: z.infer<TSchema>, context: ToolContext) => Promise<any>;
   cache?: boolean | number;
   retry?: RetryConfig;
+  handles?: MediaType[]; // 🔥 Multimodal support
+  priority?: number; // 🔥 Tool priority
 
   /**
    * Execute tool with validation, caching, and retry support
