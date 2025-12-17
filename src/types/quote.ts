@@ -1,5 +1,3 @@
-import type { ContentPart } from './content';
-
 /**
  * Quote configuration options
  */

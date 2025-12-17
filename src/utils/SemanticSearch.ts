@@ -1,21 +1,17 @@
-import { pipeline } from '@xenova/transformers';
-import { SentenceTokenizer } from 'natural';
+import { TfIdf, SentenceTokenizer } from 'natural';
 
 /**
- * 🧠 Local Semantic Search Engine
- * Uses transformer models to find relevant context without API calls
+ * 🧠 Local Context Search Engine (Lightweight TF-IDF)
+ * Uses statistical relevance to find context without heavy ML models or native binaries
  */
 export class SemanticSearch {
   private static instance: SemanticSearch;
-  private pipeline: any = null;
-  private embeddingCache: Map<string, number[]> = new Map();
   private tokenizer = new SentenceTokenizer(['Dr', 'Mr', 'Mrs', 'Ms', 'Prof', 'Sr', 'Jr']);
-  private isInitialized = false;
 
   private constructor() {}
 
   /**
-   * Singleton pattern for model reuse
+   * Singleton pattern
    */
   static getInstance(): SemanticSearch {
     if (!SemanticSearch.instance) {
@@ -25,71 +21,11 @@ export class SemanticSearch {
   }
 
   /**
-   * Initialize the transformer model (one-time download, ~23MB)
+   * Initialize (No-op for TF-IDF, kept for API compatibility)
    */
   async initialize(): Promise<void> {
-    if (this.isInitialized) return;
-
-    try {
-      console.log('[SemanticSearch] Loading transformer model...');
-      this.pipeline = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-      this.isInitialized = true;
-      console.log('[SemanticSearch] Model loaded successfully');
-    } catch (error) {
-      console.error('[SemanticSearch] Failed to load model:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Generate embedding for text (with caching)
-   */
-  async getEmbedding(text: string): Promise<number[]> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    // Check cache
-    const cacheKey = text.substring(0, 200); // Cache key from first 200 chars
-    if (this.embeddingCache.has(cacheKey)) {
-      return this.embeddingCache.get(cacheKey)!;
-    }
-
-    // Generate embedding
-    const output = await this.pipeline(text, {
-      pooling: 'mean',
-      normalize: true,
-    });
-
-    const embedding = Array.from(output.data) as number[];
-
-    // Cache result
-    this.embeddingCache.set(cacheKey, embedding);
-
-    // Limit cache size
-    if (this.embeddingCache.size > 1000) {
-      const firstKey = this.embeddingCache.keys().next().value;
-      this.embeddingCache.delete(firstKey);
-    }
-
-    return embedding;
-  }
-
-  /**
-   * Calculate cosine similarity between two embeddings
-   */
-  cosineSimilarity(a: number[], b: number[]): number {
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i];
-      normA += a[i] * a[i];
-      normB += b[i] * b[i];
-    }
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    // No heavy initialization needed! 🚀
+    return;
   }
 
   /**
@@ -118,7 +54,7 @@ export class SemanticSearch {
   }
 
   /**
-   * 🔥 Find most relevant context from quoted message
+   * 🔥 Find most relevant context using TF-IDF
    * @param quotedText - The long quoted text
    * @param replyText - The reply that provides context
    * @param options - Configuration options
@@ -128,11 +64,11 @@ export class SemanticSearch {
     replyText: string,
     options: {
       maxChunks?: number;
-      minSimilarity?: number;
+      minSimilarity?: number; // Not used in TF-IDF the same way, but kept for API
       maxChunkLength?: number;
     } = {},
   ): Promise<string> {
-    const { maxChunks = 3, minSimilarity = 0.3, maxChunkLength = 200 } = options;
+    const { maxChunks = 3, maxChunkLength = 200 } = options;
 
     // If text is short enough, return as-is
     if (quotedText.length <= maxChunkLength * maxChunks) {
@@ -140,33 +76,46 @@ export class SemanticSearch {
     }
 
     try {
-      // 1. Split into semantic chunks
+      // 1. Split into chunks
       const chunks = this.semanticChunk(quotedText, maxChunkLength);
 
-      // 2. Get embeddings
-      const replyEmbedding = await this.getEmbedding(replyText);
-      const chunkEmbeddings = await Promise.all(chunks.map((c) => this.getEmbedding(c)));
+      // 2. Create TF-IDF instance
+      const tfidf = new TfIdf();
 
-      // 3. Calculate similarities
-      const similarities = chunkEmbeddings.map((emb, idx) => ({
-        chunk: chunks[idx],
-        score: this.cosineSimilarity(replyEmbedding, emb),
-        index: idx,
-      }));
+      // 3. Add chunks as documents
+      chunks.forEach((chunk) => tfidf.addDocument(chunk));
 
-      // 4. Filter and sort by score
-      const relevant = similarities
-        .filter((s) => s.score >= minSimilarity)
+      // 4. Score chunks against the reply text
+      const scores: { index: number; score: number; chunk: string }[] = [];
+
+      tfidf.tfidfs(replyText, (i, measure) => {
+        scores.push({
+          index: i,
+          score: measure,
+          chunk: chunks[i],
+        });
+      });
+
+      // 5. Filter and sort by score
+      // Note: TF-IDF scores are not normalized 0-1 like cosine similarity
+      // We just take the top scoring ones that have > 0 score
+      const relevant = scores
+        .filter((s) => s.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, maxChunks);
 
-      // 5. Sort by original position and join
+      // If no relevant chunks found (score 0), fallback to first chunks or truncate
+      if (relevant.length === 0) {
+        return quotedText.substring(0, maxChunkLength * maxChunks) + '...';
+      }
+
+      // 6. Sort by original position and join
       const result = relevant
         .sort((a, b) => a.index - b.index)
         .map((r) => r.chunk)
         .join(' ');
 
-      return result || quotedText.substring(0, maxChunkLength * maxChunks);
+      return result;
     } catch (error) {
       console.error('[SemanticSearch] Error finding relevant context:', error);
       // Fallback to simple truncation
@@ -175,10 +124,10 @@ export class SemanticSearch {
   }
 
   /**
-   * Clear embedding cache
+   * Clear cache (No-op)
    */
   clearCache(): void {
-    this.embeddingCache.clear();
+    // No cache needed
   }
 }
 

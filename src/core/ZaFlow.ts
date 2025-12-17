@@ -2,18 +2,19 @@ import { MemoryStorage } from '../plugins/storage/MemoryStorage';
 import { AgentDelegationFormatter } from '../protocol/AgentDelegation';
 import { ToolCallParser } from '../protocol/ToolCallParser';
 import type { Agent } from '../types/agent';
+import type { ContentPart } from '../types/content';
+import { extractMediaParts, getTextContent, hasMedia } from '../types/content';
 import type { ExecutionMode, Message, ModelConfig, RunOptions, StreamOptions, TokenUsage, ZaFlowOptions, ZaFlowResponse } from '../types/core';
 import type { Hooks } from '../types/hooks';
 import type { Provider, ProviderMessage, ToolCall } from '../types/provider';
 import type { StoragePlugin } from '../types/storage';
 import type { Tool, ToolContext } from '../types/tool';
-import type { ContentPart } from '../types/content';
-import { getTextContent, hasMedia, extractMediaParts } from '../types/content';
 import { generateExecutionId } from '../utils/id';
+import { semanticSearch } from '../utils/SemanticSearch';
 import { simulateStreaming } from '../utils/streaming';
 import { ContextManager } from './Context';
-import { SharedMemoryPool } from './Memory';
 import { MediaProcessor } from './MediaProcessor';
+import { SharedMemoryPool } from './Memory';
 
 /**
  * Main ZaFlow class for orchestrating AI workflows
@@ -153,15 +154,15 @@ export default class ZaFlow<TContext = any> {
       }
 
       // 🔥 AUTO-PROCESS QUOTED MESSAGES (Semantic Search)
-      if (userMessage.quotedMessage && userMessage.quotedMessage.config) {
-        const { config, content: quotedContent } = userMessage.quotedMessage;
+      if (userMessage.quotedMessage) {
+        const { content: quotedContent } = userMessage.quotedMessage;
+        const config = userMessage.quotedMessage.config || { strategy: 'semantic' };
         const replyText = getTextContent(userMessage.content);
         const strategy = config.strategy || 'semantic';
 
         if (strategy === 'semantic' && quotedContent.length > 300) {
           try {
             console.log('[ZaFlow] 🧠 Starting semantic search for quoted message...');
-            const { semanticSearch } = await import('../utils/SemanticSearch');
             await semanticSearch.initialize();
 
             const processedQuote = await semanticSearch.findRelevantContext(quotedContent, replyText, {
@@ -180,6 +181,8 @@ export default class ZaFlow<TContext = any> {
           userMessage.quotedMessage.content = quotedContent.substring(0, config.maxLength || 300) + '...';
         }
       }
+
+      console.log('🔍 ~ run ~ src/core/ZaFlow.ts:184 ~ userMessage:', userMessage);
 
       const textMessage = getTextContent(userMessage.content);
       let response: ZaFlowResponse;

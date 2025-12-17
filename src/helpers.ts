@@ -61,8 +61,9 @@ export { defineStorage };
 // 🔥 MULTIMODAL CONTENT BUILDERS
 // ===============================================
 
-import type { ContentPart, TextPart, ImagePart, AudioPart, FilePart } from './types/content';
+import type { AudioPart, ContentPart, FilePart, ImagePart, TextPart } from './types/content';
 import type { Message } from './types/core';
+import { QuoteConfig } from './types/quote';
 
 /**
  * Create a text content part
@@ -121,12 +122,12 @@ export const msg = {
    * @param content - The reply content
    * @param config - Quote configuration (optional)
    */
-  reply(quotedMsg: Message, content: string | ContentPart[], config?: import('./types/quote').QuoteConfig): Message {
+  reply(quotedMsg: Message, content: string | ContentPart[], config?: QuoteConfig): Message {
     const quotedContent =
       typeof quotedMsg.content === 'string'
         ? quotedMsg.content
         : quotedMsg.content
-            .filter((p): p is import('./types/content').TextPart => p.type === 'text')
+            .filter((p) => p.type === 'text')
             .map((p) => p.text)
             .join(' ');
 
