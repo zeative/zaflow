@@ -581,9 +581,22 @@ REMEMBER: If there's a tool that can help, you MUST use it. This is not optional
     const results: Array<{ id: string; name: string; result: any }> = [];
 
     for (const toolCall of toolCalls) {
-      const tool = this.tools.find((t) => t.name === toolCall.name);
+      // 🔍 SMART TOOL LOOKUP: Search in both main tools AND agent-specific tools
+      let tool = this.tools.find((t) => t.name === toolCall.name);
+
+      // If not found in main tools, search in the agent's tools
+      if (!tool && agentName) {
+        const agent = this.agents.find((a) => a.name === agentName);
+        if (agent && agent.tools) {
+          tool = agent.tools.find((t) => t.name === toolCall.name);
+          if (tool) {
+            console.log(`[TOOL EXECUTION] 🎯 Found tool "${toolCall.name}" in agent "${agentName}"`);
+          }
+        }
+      }
 
       if (!tool) {
+        console.log(`[TOOL EXECUTION] ❌ Tool "${toolCall.name}" not found in main tools or agent tools`);
         results.push({
           id: toolCall.id,
           name: toolCall.name,
