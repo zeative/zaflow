@@ -100,7 +100,7 @@ export function file(base64Data: string, mimeType: string, filename?: string): F
 }
 
 /**
- * Message helpers
+ * Message helpers with reply support
  */
 export const msg = {
   user(content: string | ContentPart[]): Message {
@@ -114,5 +114,29 @@ export const msg = {
   },
   tool(content: string, name: string, toolCallId: string): Message {
     return { role: 'tool', content, name, toolCallId };
+  },
+  /**
+   * 🔥 Reply to a previous message
+   * @param quotedMsg - The message being replied to
+   * @param content - The reply content
+   */
+  reply(quotedMsg: Message, content: string | ContentPart[]): Message {
+    const quotedContent =
+      typeof quotedMsg.content === 'string'
+        ? quotedMsg.content
+        : quotedMsg.content
+            .filter((p): p is import('./types/content').TextPart => p.type === 'text')
+            .map((p) => p.text)
+            .join(' ');
+
+    return {
+      role: 'user',
+      content,
+      quotedMessage: {
+        role: quotedMsg.role as 'user' | 'assistant' | 'system',
+        content: quotedContent,
+        timestamp: Date.now(),
+      },
+    };
   },
 };

@@ -13,13 +13,24 @@ import type { ContentPart } from './content';
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 /**
- * Message structure with multimodal support
+ * Quoted message for reply/quote functionality
+ */
+export interface QuotedMessage {
+  id?: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp?: number;
+}
+
+/**
+ * Message structure with multimodal and reply support
  */
 export interface Message {
   role: MessageRole;
   content: string | ContentPart[]; // 🔥 Multimodal support
   name?: string; // For tool messages
   toolCallId?: string; // For tool responses
+  quotedMessage?: QuotedMessage; // 🔥 Reply/Quote support
 }
 
 /**

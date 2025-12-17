@@ -764,7 +764,15 @@ REMEMBER: If there's a tool that can help, you MUST use it. This is not optional
 
     for (const msg of this.history) {
       // Convert multimodal content to string for providers that don't support it
-      const content = typeof msg.content === 'string' ? msg.content : getTextContent(msg.content);
+      let content = typeof msg.content === 'string' ? msg.content : getTextContent(msg.content);
+
+      // 🔥 Format quoted message if present
+      if (msg.quotedMessage) {
+        const quotedRole = msg.quotedMessage.role.toUpperCase();
+        const quotedText = msg.quotedMessage.content.length > 100 ? msg.quotedMessage.content.substring(0, 100) + '...' : msg.quotedMessage.content;
+
+        content = `[QUOTED MESSAGE]\nRole: ${quotedRole}\nContent: "${quotedText}"\n---\n\n${content}`;
+      }
 
       messages.push({
         role: msg.role,

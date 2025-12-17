@@ -21,6 +21,7 @@ export type {
   ModelConfig,
   HistoryConfig,
   Message,
+  QuotedMessage,
   ExecutionMode,
   TokenUsage,
   ExecutionMetadata,
