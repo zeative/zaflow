@@ -192,7 +192,7 @@ export default class ZaFlow<TContext = any> {
           response = await this.runAgentic(textMessage, options);
           break;
         case 'autonomous':
-          response = await this.runAutonomous(textMessage, options);
+          response = await this.runAutonomous(userMessage, options);
           break;
         default:
           throw new Error(`Unknown mode: ${this.mode}`);
@@ -390,7 +390,7 @@ export default class ZaFlow<TContext = any> {
     };
   }
 
-  private async runAutonomous(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
+  private async runAutonomous(userMessage: Message, options?: RunOptions): Promise<ZaFlowResponse> {
     const agentsCalled: string[] = [];
     const toolsCalled: string[] = [];
     let totalUsage: TokenUsage = { prompt: 0, completion: 0, total: 0 };
@@ -409,9 +409,16 @@ export default class ZaFlow<TContext = any> {
     // Merge base system prompt with agent instructions
     const systemContent = `${baseSystemPrompt}\n\n---\n\n${agentInstructions}`;
 
+    // 🔥 Format content with quoted message
+    let content = getTextContent(userMessage.content);
+    if (userMessage.quotedMessage) {
+      const { role, content: quotedText } = userMessage.quotedMessage;
+      content = `[QUOTED MESSAGE]\nRole: ${role.toUpperCase()}\nContent: "${quotedText}"\n---\n\n${content}`;
+    }
+
     const messages: ProviderMessage[] = [
       { role: 'system', content: systemContent },
-      { role: 'user', content: message },
+      { role: 'user', content },
     ];
 
     const response = await this.provider.chat(messages, this.config);
@@ -658,7 +665,7 @@ REMEMBER: If there's a tool that can help, you MUST use it. This is not optional
           role: 'system',
           content: synthesisBasePrompt,
         },
-        { role: 'user', content: message },
+        { role: 'user', content },
         {
           role: 'assistant',
           content: response.content,

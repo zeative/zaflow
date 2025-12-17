@@ -48,7 +48,7 @@ export function compressText(text: string, options: CompressionOptions = {}): st
 
     // Entity density: sentences with entities are often important
     if (preserveEntities) {
-      const sentDoc = nlp(sentence);
+      const sentDoc = nlp(sentence) as any;
       const entities = sentDoc.topics().out('array').length;
       const numbers = sentDoc.numbers().out('array').length;
       const dates = sentDoc.dates().out('array').length;
@@ -204,7 +204,7 @@ export function extractKeyEntities(text: string): {
   topics: string[];
   organizations: string[];
 } {
-  const doc = nlp(text);
+  const doc = nlp(text) as any;
 
   return {
     numbers: doc.numbers().out('array'),
