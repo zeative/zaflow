@@ -284,8 +284,14 @@ export default class ZaFlow<TContext = any> {
 
     const agentInstructions = AgentDelegationFormatter.generateAgentInstructions(this.agents, this.tools);
 
+    // Merge custom system prompt with agent instructions
+    let systemContent = agentInstructions;
+    if (this.systemPrompt) {
+      systemContent = `${this.systemPrompt}\n\n---\n\n${agentInstructions}`;
+    }
+
     const messages: ProviderMessage[] = [
-      { role: 'system', content: agentInstructions },
+      { role: 'system', content: systemContent },
       { role: 'user', content: message },
     ];
 
@@ -299,7 +305,49 @@ export default class ZaFlow<TContext = any> {
 
     console.log('[AUTONOMOUS] Main agent response length:', response.content.length);
 
-    const agentCalls = AgentDelegationFormatter.parseAgentCalls(response.content);
+    let agentCalls = AgentDelegationFormatter.parseAgentCalls(response.content);
+
+    // 🚨 ENFORCEMENT: If no agent calls detected BUT agents are available, force retry
+    if (agentCalls.length === 0 && this.agents.length > 0) {
+      console.log('[AUTONOMOUS] ⚠️  No agent delegation detected, but agents are available. Enforcing delegation...');
+
+      // Add extremely strong enforcement message
+      const enforcementMessage = {
+        role: 'user' as const,
+        content: `⛔ STOP! You MUST follow the delegation protocol.
+
+You have ${this.agents.length} specialized agent(s) available:
+${this.agents.map((a) => `- "${a.name}" (${a.role})`).join('\n')}
+
+The user's request requires analysis/processing that matches these agents' capabilities.
+
+YOU ARE REQUIRED TO:
+1. Output the <agent_call> XML format
+2. Delegate to the appropriate agent
+3. NOT respond directly
+
+OUTPUT THE <agent_call> XML NOW. This is MANDATORY, not optional.`,
+      };
+
+      const retryMessages = [...messages, { role: 'assistant' as const, content: response.content }, enforcementMessage];
+
+      const retryResponse = await this.provider.chat(retryMessages, this.config);
+
+      if (retryResponse.usage) {
+        totalUsage.prompt += retryResponse.usage.promptTokens;
+        totalUsage.completion += retryResponse.usage.completionTokens;
+        totalUsage.total += retryResponse.usage.totalTokens;
+      }
+
+      // Parse again after enforcement
+      agentCalls = AgentDelegationFormatter.parseAgentCalls(retryResponse.content);
+
+      if (agentCalls.length > 0) {
+        console.log('[AUTONOMOUS] ✅ Enforcement successful! Agent delegation now detected.');
+      } else {
+        console.log('[AUTONOMOUS] ⚠️  Model still refusing to delegate. Proceeding with direct response.');
+      }
+    }
 
     if (agentCalls.length > 0) {
       console.log(
@@ -325,8 +373,48 @@ export default class ZaFlow<TContext = any> {
         this.hooks?.onAgentStart?.(agent.name);
 
         try {
+          // Build sub-agent system prompt with tool enforcement
+          let agentSystemPrompt = agent.getSystemPrompt();
+
+          // 🚨 TOOL ENFORCEMENT: Add mandatory tool calling instructions if agent has tools
+          if (agent.tools && agent.tools.length > 0) {
+            const toolInstructions = `\n\n🚨 MANDATORY TOOL USAGE PROTOCOL 🚨
+
+You have ${agent.tools.length} specialized tool(s) available to help complete this task:
+
+${agent.tools.map((t) => `- **${t.name}**: ${t.description}`).join('\n')}
+
+⚠️ CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
+
+1. **TOOL USAGE IS REQUIRED**: When you need to perform an action that a tool can handle, you MUST use that tool. Direct answers without using tools are FORBIDDEN when tools are available.
+
+2. **DECISION PROCESS** (follow step-by-step):
+   Step 1: Read the task carefully
+   Step 2: Check if ANY available tool matches what you need to do
+   Step 3: If YES → You MUST use <tool_call> XML format (see below)
+   Step 4: If NO tools match → Only then respond directly
+
+3. **TOOL CALL FORMAT** (REQUIRED when tools match):
+<tool_call>
+<name>exact_tool_name</name>
+<arguments>{"param1": "value1", "param2": "value2"}</arguments>
+</tool_call>
+
+4. **EXAMPLES**:
+   - Task needs data analysis → Use "universal analisis tool"
+   - Task needs web search → Use search tool
+   - Task needs calculation → Use calculator tool
+
+⛔ FORBIDDEN: Responding without using tools when tools are available
+✅ REQUIRED: Always use <tool_call> XML format when tools match the task
+
+REMEMBER: If there's a tool that can help, you MUST use it. This is not optional.`;
+
+            agentSystemPrompt += toolInstructions;
+          }
+
           const agentMessages: ProviderMessage[] = [
-            { role: 'system', content: agent.getSystemPrompt() },
+            { role: 'system', content: agentSystemPrompt },
             { role: 'user', content: agentCall.task },
           ];
 
@@ -338,19 +426,48 @@ export default class ZaFlow<TContext = any> {
             totalUsage.total += agentResponse.usage.totalTokens;
           }
 
-          if (agentResponse.toolCalls && agentResponse.toolCalls.length > 0) {
-            console.log(`[AUTONOMOUS] ${agent.name} 🔧 called ${agentResponse.toolCalls.length} tool(s)`);
+          // 🧠 GENIUS MULTI-LAYER TOOL INTELLIGENCE
+          // Use advanced cascade to extract tool calls no matter what
+          const { ToolIntelligence } = await import('../utils/ToolIntelligence');
 
-            const toolResults = await this.executeToolCalls(agentResponse.toolCalls, agent.name, generateExecutionId());
+          let toolCalls = ToolIntelligence.extractToolCallsWithFallback(agentResponse.content, agentCall.task, agent.tools || [], agentResponse.toolCalls);
 
-            toolsCalled.push(...agentResponse.toolCalls.map((tc) => tc.name));
+          // If still no tool calls after intelligent extraction, try one more time with template
+          if (toolCalls.length === 0 && agent.tools && agent.tools.length > 0) {
+            console.log(`[AUTONOMOUS] ${agent.name} 🎯 Trying template-guided retry...`);
+
+            const template = ToolIntelligence.generateFillableTemplate(agent.tools, agentCall.task);
+            const templateMessage = {
+              role: 'user' as const,
+              content: `You MUST use the tool. Here's the exact template:${template}`,
+            };
+
+            const retryMessages = [...agentMessages, { role: 'assistant' as const, content: agentResponse.content }, templateMessage];
+            const retryResponse = await this.provider.chat(retryMessages, agent.config || this.config, agent.tools);
+
+            if (retryResponse.usage) {
+              totalUsage.prompt += retryResponse.usage.promptTokens;
+              totalUsage.completion += retryResponse.usage.completionTokens;
+              totalUsage.total += retryResponse.usage.totalTokens;
+            }
+
+            // Try extraction again with retry response
+            toolCalls = ToolIntelligence.extractToolCallsWithFallback(retryResponse.content, agentCall.task, agent.tools || [], retryResponse.toolCalls);
+          }
+
+          if (toolCalls && toolCalls.length > 0) {
+            console.log(`[AUTONOMOUS] ${agent.name} 🔧 called ${toolCalls.length} tool(s)`);
+
+            const toolResults = await this.executeToolCalls(toolCalls, agent.name, generateExecutionId());
+
+            toolsCalled.push(...toolCalls.map((tc) => tc.name));
 
             const finalMessages = [
               ...agentMessages,
               {
                 role: 'assistant' as const,
-                content: agentResponse.content,
-                toolCalls: agentResponse.toolCalls,
+                content: agentResponse.content || 'Using tools...',
+                toolCalls: toolCalls,
               },
               ...toolResults.map((tr) => ({
                 role: 'tool' as const,
@@ -358,6 +475,10 @@ export default class ZaFlow<TContext = any> {
                 name: tr.name,
                 toolCallId: tr.id,
               })),
+              {
+                role: 'user' as const,
+                content: 'Based on the tool results above, provide a complete answer to the task.',
+              },
             ];
 
             const finalResponse = await this.provider.chat(finalMessages, agent.config || this.config);
@@ -395,10 +516,15 @@ export default class ZaFlow<TContext = any> {
 
       console.log('[AUTONOMOUS] 🔄 Synthesizing results from', agentResults.length, 'agent(s)');
 
+      // Use custom system prompt for synthesis to maintain personality
+      const synthesisSystemPrompt = this.systemPrompt
+        ? `${this.systemPrompt}\n\nYou are the main orchestrator. Synthesize the results from specialized agents into a comprehensive final answer.`
+        : 'You are the main orchestrator. Synthesize the results from specialized agents into a comprehensive final answer.';
+
       const synthesisMessages: ProviderMessage[] = [
         {
           role: 'system',
-          content: 'You are the main orchestrator. Synthesize the results from specialized agents into a comprehensive final answer.',
+          content: synthesisSystemPrompt,
         },
         { role: 'user', content: message },
         {
