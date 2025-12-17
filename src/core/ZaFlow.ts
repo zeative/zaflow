@@ -59,6 +59,10 @@ export default class ZaFlow<TContext = any> {
     return [...this.history];
   }
 
+  loadHistory(history: Message[]): void {
+    this.history = [...history];
+  }
+
   clearHistory(): void {
     this.history = [];
   }
