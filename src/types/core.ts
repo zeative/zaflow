@@ -20,6 +20,7 @@ export interface QuotedMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: number;
+  config?: import('../types/quote').QuoteConfig; // 🔥 Store config for runtime processing
 }
 
 /**

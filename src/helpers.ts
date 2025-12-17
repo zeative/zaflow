@@ -100,7 +100,7 @@ export function file(base64Data: string, mimeType: string, filename?: string): F
 }
 
 /**
- * Message helpers with reply support
+ * Message helpers with intelligent reply support
  */
 export const msg = {
   user(content: string | ContentPart[]): Message {
@@ -116,11 +116,12 @@ export const msg = {
     return { role: 'tool', content, name, toolCallId };
   },
   /**
-   * 🔥 Reply to a previous message
+   * 🔥 Reply to a previous message (semantic processing happens automatically at runtime)
    * @param quotedMsg - The message being replied to
    * @param content - The reply content
+   * @param config - Quote configuration (optional)
    */
-  reply(quotedMsg: Message, content: string | ContentPart[]): Message {
+  reply(quotedMsg: Message, content: string | ContentPart[], config?: import('./types/quote').QuoteConfig): Message {
     const quotedContent =
       typeof quotedMsg.content === 'string'
         ? quotedMsg.content
@@ -136,6 +137,7 @@ export const msg = {
         role: quotedMsg.role as 'user' | 'assistant' | 'system',
         content: quotedContent,
         timestamp: Date.now(),
+        config, // 🔥 Store config for runtime processing
       },
     };
   },

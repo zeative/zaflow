@@ -152,6 +152,35 @@ export default class ZaFlow<TContext = any> {
         }
       }
 
+      // 🔥 AUTO-PROCESS QUOTED MESSAGES (Semantic Search)
+      if (userMessage.quotedMessage && userMessage.quotedMessage.config) {
+        const { config, content: quotedContent } = userMessage.quotedMessage;
+        const replyText = getTextContent(userMessage.content);
+        const strategy = config.strategy || 'semantic';
+
+        if (strategy === 'semantic' && quotedContent.length > 300) {
+          try {
+            console.log('[ZaFlow] 🧠 Starting semantic search for quoted message...');
+            const { semanticSearch } = await import('../utils/SemanticSearch');
+            await semanticSearch.initialize();
+
+            const processedQuote = await semanticSearch.findRelevantContext(quotedContent, replyText, {
+              maxChunks: config.semanticOptions?.maxChunks || 3,
+              minSimilarity: config.semanticOptions?.minSimilarity || 0.3,
+              maxChunkLength: config.semanticOptions?.maxChunkLength || 200,
+            });
+
+            console.log(`[ZaFlow] 🧠 Semantic extraction: ${quotedContent.length} → ${processedQuote.length} chars`);
+            userMessage.quotedMessage.content = processedQuote;
+          } catch (error) {
+            console.warn('[ZaFlow] Semantic search failed, falling back to truncate:', error);
+            userMessage.quotedMessage.content = quotedContent.substring(0, config.maxLength || 300) + '...';
+          }
+        } else if (strategy === 'truncate' && quotedContent.length > (config.maxLength || 300)) {
+          userMessage.quotedMessage.content = quotedContent.substring(0, config.maxLength || 300) + '...';
+        }
+      }
+
       const textMessage = getTextContent(userMessage.content);
       let response: ZaFlowResponse;
 

@@ -67,3 +67,6 @@ export type {
 
 // 🔥 Multimodal content types
 export type { ContentPart, TextPart, ImagePart, AudioPart, FilePart, MediaType } from './types/content';
+
+// 🔥 Quote configuration types
+export type { QuoteConfig } from './types/quote';
