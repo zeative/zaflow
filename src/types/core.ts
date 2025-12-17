@@ -72,8 +72,6 @@ export interface ZaFlowOptions<TContext = any> {
   mode: ExecutionMode;
   /** Provider instance */
   provider: Provider;
-  /** Model name */
-  model: string;
   /** Sub-agents (for autonomous mode) */
   agents?: Agent[];
   /** Tools (for agentic/autonomous mode) */
@@ -106,6 +104,8 @@ export interface RunOptions {
   detailed?: boolean;
   /** Skip context clearing after run */
   persistContext?: boolean;
+  /** Override system prompt for this run */
+  systemPrompt?: string;
 }
 
 /**
@@ -116,6 +116,8 @@ export interface StreamOptions {
   config?: Partial<ModelConfig>;
   /** Skip context clearing after run */
   persistContext?: boolean;
+  /** Override system prompt for this stream */
+  systemPrompt?: string;
 }
 
 /**

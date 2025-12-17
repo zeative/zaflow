@@ -1,5 +1,6 @@
 import type { Tool } from './tool';
 import type { ModelConfig } from './core';
+import type { Provider } from './provider';
 
 /**
  * Agent capabilities
@@ -28,8 +29,10 @@ export interface AgentDefinition {
   systemPrompt?: string;
   /** Tools this agent can use */
   tools?: Tool[];
-  /** Model for this agent */
-  model: string;
+  /** Optional: Provider for this agent (if different from main provider) */
+  provider?: Provider;
+  /** Optional: Model for this agent (uses provider.defaultModel if not specified) */
+  model?: string;
   /** Model configuration */
   config?: ModelConfig;
   /** Optional: Agent capabilities (for auto-routing) */
@@ -46,7 +49,8 @@ export interface Agent {
   role: string;
   systemPrompt?: string;
   tools?: Tool[];
-  model: string;
+  provider?: Provider;
+  model?: string;
   config?: ModelConfig;
   capabilities?: AgentCapability[];
   constraints?: AgentConstraints;
@@ -60,4 +64,14 @@ export interface Agent {
    * Check if agent has a capability
    */
   hasCapability(capability: string): boolean;
+
+  /**
+   * Get the model for this agent
+   */
+  getModel(): string;
+
+  /**
+   * Get the provider for this agent
+   */
+  getProvider(): Provider | undefined;
 }

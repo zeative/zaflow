@@ -18,7 +18,6 @@ import { SharedMemoryPool } from './Memory';
 export default class ZaFlow<TContext = any> {
   private mode: ExecutionMode;
   private provider: Provider;
-  private model: string;
   private agents: Agent[];
   private tools: Tool[];
   private config: ModelConfig;
@@ -28,11 +27,11 @@ export default class ZaFlow<TContext = any> {
   private hooks?: Hooks;
   private history: Message[] = [];
   private systemPrompt?: string;
+  private prompts: Array<{ prompt: string; context?: any }> = [];
 
   constructor(options: ZaFlowOptions<TContext>) {
     this.mode = options.mode;
     this.provider = options.provider;
-    this.model = options.model;
     this.agents = options.agents || [];
     this.tools = options.tools || [];
     this.config = options.config || {};
@@ -62,6 +61,44 @@ export default class ZaFlow<TContext = any> {
 
   clearHistory(): void {
     this.history = [];
+  }
+
+  /**
+   * Get the model from provider's defaultModel
+   */
+  getModel(): string {
+    return this.provider.defaultModel;
+  }
+
+  /**
+   * Add custom prompt with optional context
+   * This allows adding additional prompts that can use context data
+   */
+  addPrompt(prompt: string, context?: any): void {
+    this.prompts.push({ prompt, context });
+  }
+
+  /**
+   * Get compiled prompts with context interpolation
+   */
+  private getCompiledPrompts(): string {
+    if (this.prompts.length === 0) {
+      return '';
+    }
+
+    return this.prompts
+      .map(({ prompt, context }) => {
+        if (!context) {
+          return prompt;
+        }
+
+        // Simple context replacement: {key} -> value
+        return prompt.replace(/\{([^}]+)\}/g, (match, key) => {
+          const value = context[key];
+          return value !== undefined ? String(value) : match;
+        });
+      })
+      .join('\n\n');
   }
 
   async run(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
@@ -129,6 +166,7 @@ export default class ZaFlow<TContext = any> {
       const response = await this.run(message, {
         persistContext: options?.persistContext,
         detailed: true, // Always generate metadata for hooks
+        systemPrompt: options?.systemPrompt, // Pass systemPrompt for override
       });
 
       // Simulate streaming of the complete result
@@ -142,7 +180,7 @@ export default class ZaFlow<TContext = any> {
     } else {
       // SINGLE mode can use true provider streaming
       if (this.provider.stream) {
-        const messages = this.prepareMessages();
+        const messages = this.prepareMessages(options?.systemPrompt);
         const config = { ...this.config, ...options?.config, stream: true };
 
         const streamIter = this.provider.stream(messages, config, this.tools);
@@ -157,7 +195,7 @@ export default class ZaFlow<TContext = any> {
         this.hooks?.onStreamComplete?.(fullText);
         this.history.push({ role: 'assistant', content: fullText });
       } else {
-        const response = await this.run(message, { persistContext: options?.persistContext });
+        const response = await this.run(message, { persistContext: options?.persistContext, systemPrompt: options?.systemPrompt });
 
         for await (const chunk of simulateStreaming(response.content)) {
           this.hooks?.onStreamChunk?.(chunk);
@@ -174,7 +212,7 @@ export default class ZaFlow<TContext = any> {
   }
 
   private async runSingle(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
-    const messages = this.prepareMessages();
+    const messages = this.prepareMessages(options?.systemPrompt);
     const config = { ...this.config, ...options?.config };
 
     const response = await this.provider.chat(messages, config);
@@ -191,14 +229,14 @@ export default class ZaFlow<TContext = any> {
             toolsCalled: [],
             agentsCalled: [],
             executionTime: 0,
-            model: this.model,
+            model: this.getModel(),
           }
         : undefined,
     };
   }
 
   private async runAgentic(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
-    const messages = this.prepareMessages();
+    const messages = this.prepareMessages(options?.systemPrompt);
     const config = { ...this.config, ...options?.config };
     const toolsCalled: string[] = [];
     let totalUsage: TokenUsage = { prompt: 0, completion: 0, total: 0 };
@@ -236,7 +274,7 @@ export default class ZaFlow<TContext = any> {
                 toolsCalled,
                 agentsCalled: [],
                 executionTime: 0,
-                model: this.model,
+                model: this.getModel(),
               }
             : undefined,
         };
@@ -271,7 +309,7 @@ export default class ZaFlow<TContext = any> {
             toolsCalled,
             agentsCalled: [],
             executionTime: 0,
-            model: this.model,
+            model: this.getModel(),
           }
         : undefined,
     };
@@ -284,11 +322,17 @@ export default class ZaFlow<TContext = any> {
 
     const agentInstructions = AgentDelegationFormatter.generateAgentInstructions(this.agents, this.tools);
 
-    // Merge custom system prompt with agent instructions
-    let systemContent = agentInstructions;
-    if (this.systemPrompt) {
-      systemContent = `${this.systemPrompt}\n\n---\n\n${agentInstructions}`;
+    // Priority: runtime systemPrompt > class systemPrompt > default
+    let baseSystemPrompt = options?.systemPrompt || this.systemPrompt || this.getDefaultSystemPrompt();
+
+    // Append compiled prompts if any
+    const compiledPrompts = this.getCompiledPrompts();
+    if (compiledPrompts) {
+      baseSystemPrompt = `${baseSystemPrompt}\n\n${compiledPrompts}`;
     }
+
+    // Merge base system prompt with agent instructions
+    const systemContent = `${baseSystemPrompt}\n\n---\n\n${agentInstructions}`;
 
     const messages: ProviderMessage[] = [
       { role: 'system', content: systemContent },
@@ -516,15 +560,28 @@ REMEMBER: If there's a tool that can help, you MUST use it. This is not optional
 
       console.log('[AUTONOMOUS] 🔄 Synthesizing results from', agentResults.length, 'agent(s)');
 
-      // Use custom system prompt for synthesis to maintain personality
-      const synthesisSystemPrompt = this.systemPrompt
-        ? `${this.systemPrompt}\n\nYou are the main orchestrator. Synthesize the results from specialized agents into a comprehensive final answer.`
-        : 'You are the main orchestrator. Synthesize the results from specialized agents into a comprehensive final answer.';
+      // Priority: runtime systemPrompt > class systemPrompt > default
+      let synthesisBasePrompt = options?.systemPrompt || this.systemPrompt;
+
+      // Add synthesizer instruction
+      const synthesizerInstruction = 'You are the main orchestrator. Synthesize the results from specialized agents into a comprehensive final answer.';
+
+      if (synthesisBasePrompt) {
+        synthesisBasePrompt = `${synthesisBasePrompt}\n\n${synthesizerInstruction}`;
+      } else {
+        synthesisBasePrompt = synthesizerInstruction;
+      }
+
+      // Append compiled prompts if any
+      const compiledPrompts = this.getCompiledPrompts();
+      if (compiledPrompts) {
+        synthesisBasePrompt = `${synthesisBasePrompt}\n\n${compiledPrompts}`;
+      }
 
       const synthesisMessages: ProviderMessage[] = [
         {
           role: 'system',
-          content: synthesisSystemPrompt,
+          content: synthesisBasePrompt,
         },
         { role: 'user', content: message },
         {
@@ -555,7 +612,7 @@ REMEMBER: If there's a tool that can help, you MUST use it. This is not optional
               toolsCalled,
               agentsCalled,
               executionTime: 0,
-              model: this.model,
+              model: this.getModel(),
             }
           : undefined,
       };
@@ -570,7 +627,7 @@ REMEMBER: If there's a tool that can help, you MUST use it. This is not optional
               toolsCalled,
               agentsCalled,
               executionTime: 0,
-              model: this.model,
+              model: this.getModel(),
             }
           : undefined,
       };
@@ -645,11 +702,19 @@ REMEMBER: If there's a tool that can help, you MUST use it. This is not optional
     return results;
   }
 
-  private prepareMessages(): ProviderMessage[] {
+  private prepareMessages(runtimeSystemPrompt?: string): ProviderMessage[] {
     const messages: ProviderMessage[] = [];
 
-    const systemContent = this.systemPrompt || this.getDefaultSystemPrompt();
-    messages.push({ role: 'system', content: systemContent });
+    // Priority: runtime systemPrompt > class systemPrompt > default
+    let baseSystemPrompt = runtimeSystemPrompt || this.systemPrompt || this.getDefaultSystemPrompt();
+
+    // Append compiled prompts if any
+    const compiledPrompts = this.getCompiledPrompts();
+    if (compiledPrompts) {
+      baseSystemPrompt = `${baseSystemPrompt}\n\n${compiledPrompts}`;
+    }
+
+    messages.push({ role: 'system', content: baseSystemPrompt });
 
     for (const msg of this.history) {
       messages.push({

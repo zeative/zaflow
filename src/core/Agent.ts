@@ -1,6 +1,7 @@
 import type { AgentCapability, AgentDefinition, Agent as IAgent } from '../types/agent';
 import type { ModelConfig } from '../types/core';
 import type { Tool } from '../types/tool';
+import type { Provider } from '../types/provider';
 
 /**
  * Agent implementation
@@ -10,7 +11,8 @@ export class Agent implements IAgent {
   role: string;
   systemPrompt?: string;
   tools?: Tool[];
-  model: string;
+  provider?: Provider;
+  model?: string;
   config?: ModelConfig;
   capabilities?: AgentCapability[];
   constraints?: {
@@ -23,6 +25,7 @@ export class Agent implements IAgent {
     this.role = definition.role;
     this.systemPrompt = definition.systemPrompt;
     this.tools = definition.tools;
+    this.provider = definition.provider;
     this.model = definition.model;
     this.config = definition.config;
     this.capabilities = definition.capabilities;
@@ -60,5 +63,27 @@ export class Agent implements IAgent {
     }
 
     return this.capabilities.some((cap) => cap.toLowerCase().includes(capability.toLowerCase()));
+  }
+
+  /**
+   * Get the model for this agent
+   */
+  getModel(): string {
+    if (this.model) {
+      return this.model;
+    }
+
+    if (this.provider) {
+      return this.provider.defaultModel;
+    }
+
+    throw new Error(`Agent "${this.name}" has no model or provider configured`);
+  }
+
+  /**
+   * Get the provider for this agent
+   */
+  getProvider(): Provider | undefined {
+    return this.provider;
   }
 }
