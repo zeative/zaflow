@@ -1,4 +1,5 @@
 import { MemoryStorage } from '../plugins/storage/MemoryStorage';
+import { Intent } from '../utils/Intent';
 import { AgentDelegationFormatter } from '../protocol/AgentDelegation';
 import { ToolCallParser } from '../protocol/ToolCallParser';
 import type { Agent } from '../types/agent';
@@ -437,25 +438,19 @@ export default class ZaFlow<TContext = any> {
     let agentCalls = AgentDelegationFormatter.parseAgentCalls(response.content);
 
     // 🚨 ENFORCEMENT: If no agent calls detected BUT agents are available, force retry
-    if (agentCalls.length === 0 && this.agents.length > 0) {
+    // SKIP enforcement if the user message is just a greeting/conversational
+    const isConversational = Intent.isConversational(content);
+
+    if (agentCalls.length === 0 && this.agents.length > 0 && !isConversational) {
       console.log('[AUTONOMOUS] ⚠️  No agent delegation detected, but agents are available. Enforcing delegation...');
 
-      // Add extremely strong enforcement message
+      // Add helpful reminder message
       const enforcementMessage = {
         role: 'user' as const,
-        content: `⛔ STOP! You MUST follow the delegation protocol.
-
-You have ${this.agents.length} specialized agent(s) available:
+        content: `💡 HINT: You have specialized agents available that might be better suited for this task:
 ${this.agents.map((a) => `- "${a.name}" (${a.role})`).join('\n')}
 
-The user's request requires analysis/processing that matches these agents' capabilities.
-
-YOU ARE REQUIRED TO:
-1. Output the <agent_call> XML format
-2. Delegate to the appropriate agent
-3. NOT respond directly
-
-OUTPUT THE <agent_call> XML NOW. This is MANDATORY, not optional.`,
+If the user's request requires specialized processing, please use the <agent_call> XML format to delegate. Otherwise, if it's just general conversation, you can respond directly.`,
       };
 
       const retryMessages = [...messages, { role: 'assistant' as const, content: response.content }, enforcementMessage];
@@ -505,39 +500,30 @@ OUTPUT THE <agent_call> XML NOW. This is MANDATORY, not optional.`,
           // Build sub-agent system prompt with tool enforcement
           let agentSystemPrompt = agent.getSystemPrompt();
 
-          // 🚨 TOOL ENFORCEMENT: Add mandatory tool calling instructions if agent has tools
+          // 🧠 TOOL GUIDELINES: Add tool calling instructions if agent has tools
           if (agent.tools && agent.tools.length > 0) {
-            const toolInstructions = `\n\n🚨 MANDATORY TOOL USAGE PROTOCOL 🚨
-
+            const toolInstructions = `\n\n📋 TOOL USAGE PROTOCOL
+            
 You have ${agent.tools.length} specialized tool(s) available to help complete this task:
 
 ${agent.tools.map((t) => `- **${t.name}**: ${t.description}`).join('\n')}
 
-⚠️ CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
+⚠️ GUIDELINES:
 
-1. **TOOL USAGE IS REQUIRED**: When you need to perform an action that a tool can handle, you MUST use that tool. Direct answers without using tools are FORBIDDEN when tools are available.
+1. **TOOL USAGE**: When you need to perform an action that a tool can handle, you should use that tool.
 
-2. **DECISION PROCESS** (follow step-by-step):
-   Step 1: Read the task carefully
-   Step 2: Check if ANY available tool matches what you need to do
-   Step 3: If YES → You MUST use <tool_call> XML format (see below)
-   Step 4: If NO tools match → Only then respond directly
+2. **DECISION PROCESS**:
+   - Check if ANY available tool matches what you need to do
+   - If YES → Use <tool_call> XML format (see below)
+   - If NO tools match → Respond directly
 
-3. **TOOL CALL FORMAT** (REQUIRED when tools match):
+3. **TOOL CALL FORMAT**:
 <tool_call>
 <name>exact_tool_name</name>
 <arguments>{"param1": "value1", "param2": "value2"}</arguments>
 </tool_call>
 
-4. **EXAMPLES**:
-   - Task needs data analysis → Use "universal analisis tool"
-   - Task needs web search → Use search tool
-   - Task needs calculation → Use calculator tool
-
-⛔ FORBIDDEN: Responding without using tools when tools are available
-✅ REQUIRED: Always use <tool_call> XML format when tools match the task
-
-REMEMBER: If there's a tool that can help, you MUST use it. This is not optional.`;
+REMEMBER: Use tools when they are relevant to the task.`;
 
             agentSystemPrompt += toolInstructions;
           }

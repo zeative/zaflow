@@ -180,28 +180,6 @@ export class ToolIntelligence {
       return [autoCall];
     }
 
-    // Layer 5: Force best-match
-    if (availableTools.length > 0) {
-      console.log('[TOOL INTELLIGENCE] 🚀 Layer 5: Force best-match...');
-
-      const bestTool = availableTools.reduce(
-        (best, tool) => {
-          const sim = this.calculateSemanticSimilarity(`${task} ${response}`, `${tool.name} ${tool.description}`);
-          return sim > best.similarity ? { tool, similarity: sim } : best;
-        },
-        { tool: availableTools[0], similarity: 0 },
-      );
-
-      console.log(`[TOOL INTELLIGENCE] ✅ Layer 5: Forced "${bestTool.tool.name}"`);
-      return [
-        {
-          id: `forced_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          name: bestTool.tool.name,
-          arguments: this.inferArguments(response, task, bestTool.tool),
-        },
-      ];
-    }
-
     return [];
   }
 }

@@ -27,21 +27,21 @@ export class AgentDelegationFormatter {
   static generateAgentInstructions(agents: Agent[], tools?: Tool[]): string {
     const agentXML = this.formatAgentsAsXML(agents);
 
-    let instructions = `🚨 MANDATORY DELEGATION PROTOCOL 🚨
+    let instructions = `📋 DELEGATION PROTOCOL
 
 You are an orchestrator that coordinates specialized agents. You have specialized agents available to handle tasks.
 
 ${agentXML}
 
-⚠️ CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
+⚠️ GUIDELINES:
 
-1. AGENT DELEGATION IS REQUIRED: When specialized agents are available that match the user's request, you MUST delegate to them. Direct responses are FORBIDDEN.
+1. AGENT DELEGATION: When specialized agents are available that match the user's request, you should delegate to them.
 
 2. DECISION PROCESS (follow this step-by-step):
    Step 1: Read the user's request carefully
    Step 2: Check if ANY available agent's role/capabilities match the request
-   Step 3: If YES → You MUST use <agent_call> XML format (see below)
-   Step 4: If NO agents match → Only then respond directly
+   Step 3: If YES → Use <agent_call> XML format (see below)
+   Step 4: If NO agents match or the request is conversational (greetings, social) → Respond directly
 
 3. DELEGATION FORMAT (REQUIRED when agents match):
 <agent_call>
@@ -53,7 +53,7 @@ ${agentXML}
    - User asks for "analysis" → Delegate to "Analisis AI" (analysis agent)
    - User asks for "search" → Delegate to "Search Agent" (search agent)
    - User asks for "calculation" → Delegate to "Calculator Agent" (math agent)
-   - ANY task that matches agent capabilities → MUST DELEGATE
+   - ANY task that matches agent capabilities → Delegate
 
 5. MULTIPLE AGENTS: You can call multiple agents if needed. Each gets its own <agent_call> block.
 
@@ -68,19 +68,14 @@ ${agentXML}
       instructions += `\nUse <tool_call> format for direct tool usage (only when no agent matches).`;
     }
 
-    instructions += `\n\n⛔ FORBIDDEN BEHAVIORS:
-- Responding directly when a specialized agent is available
-- Ignoring available agents
-- Making up agent names that don't exist
-- Skipping the <agent_call> XML format
+    instructions += `\n\n⛔ GUIDELINES:
+- Avoid making up agent names that don't exist
+- Use proper <agent_call> XML format when delegating
 
-✅ REQUIRED BEHAVIORS:
-- Always check if agents match the request
-- Always use proper <agent_call> XML format
-- Always include both <name> and <task> tags
-- Always delegate when agents are available
-
-REMEMBER: If there's an agent that can help, you MUST delegate. This is not optional.`;
+✅ BEST PRACTICES:
+- Check if agents match the request
+- Use <agent_call> XML format for complex tasks
+- Respond directly for greetings or simple conversation`;
 
     return instructions;
   }
