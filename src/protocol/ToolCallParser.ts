@@ -17,24 +17,51 @@ export class ToolCallParser {
     for (const match of matches) {
       const toolContent = match[1];
 
-      // Extract name
-      const nameMatch = /<name>(.*?)<\/name>/.exec(toolContent);
-      const name = nameMatch ? nameMatch[1].trim() : '';
+      // Extract name (handle <name>, <tool_name>, or <tool>)
+      const nameMatch = /<(?:name|tool_name|tool)>(.*?)<\/(?:name|tool_name|tool)>/.exec(toolContent);
+      let name = nameMatch ? nameMatch[1].trim() : '';
+      let args = {};
 
-      // Extract arguments
-      const argsMatch = /<arguments>(.*?)<\/arguments>/s.exec(toolContent);
-      const argsStr = argsMatch ? argsMatch[1].trim() : '{}';
+      // If no name tag found, try to parse as JSON or treat as plain text
+      if (!name) {
+        try {
+          // Try to parse the whole content as JSON
+          const cleanJson = toolContent.replace(/```json\s*|\s*```/g, '').trim();
+          const parsed = JSON.parse(cleanJson);
+          if (parsed.name) {
+            name = parsed.name;
+            args = parsed.arguments || parsed.args || {};
+          }
+        } catch (e) {
+          // Not JSON, treat as plain text if no other tags present
+          if (!toolContent.includes('<')) {
+            name = toolContent.trim();
+          }
+        }
+      }
 
-      try {
-        const args = JSON.parse(argsStr);
+      if (!name) continue;
+
+      // Extract arguments if not already parsed from JSON
+      if (Object.keys(args).length === 0) {
+        const argsMatch = /<(?:arguments|args)>(.*?)<\/(?:arguments|args)>/s.exec(toolContent);
+        const argsStr = argsMatch ? argsMatch[1].trim() : '{}';
+
+        try {
+          if (argsStr && argsStr !== '{}') {
+            const cleanJson = argsStr.replace(/```json\s*|\s*```/g, '').trim();
+            args = JSON.parse(cleanJson);
+          }
+        } catch (error) {
+          console.warn('[ToolCallParser] Failed to parse tool arguments, using empty object:', argsStr);
+        }
+      }
+        
         toolCalls.push({
           id: `toolcall_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           name,
           arguments: args,
         });
-      } catch (error) {
-        console.error('Failed to parse tool arguments:', argsStr);
-      }
     }
 
     return toolCalls;

@@ -436,12 +436,13 @@ export default class ZaFlow<TContext = any> {
     console.log('[AUTONOMOUS] Main agent response length:', response.content.length);
 
     let agentCalls = AgentDelegationFormatter.parseAgentCalls(response.content);
+    let toolCalls = ToolCallParser.parse(response.content);
 
     // 🚨 ENFORCEMENT: If no agent calls detected BUT agents are available, force retry
     // SKIP enforcement if the user message is just a greeting/conversational
     const isConversational = Intent.isConversational(content);
 
-    if (agentCalls.length === 0 && this.agents.length > 0 && !isConversational) {
+    if (agentCalls.length === 0 && toolCalls.length === 0 && this.agents.length > 0 && !isConversational) {
       console.log('[AUTONOMOUS] ⚠️  No agent delegation detected, but agents are available. Enforcing delegation...');
 
       // Add helpful reminder message
@@ -465,21 +466,29 @@ If the user's request requires specialized processing, please use the <agent_cal
 
       // Parse again after enforcement
       agentCalls = AgentDelegationFormatter.parseAgentCalls(retryResponse.content);
+      toolCalls = ToolCallParser.parse(retryResponse.content);
 
-      if (agentCalls.length > 0) {
-        console.log('[AUTONOMOUS] ✅ Enforcement successful! Agent delegation now detected.');
+      if (agentCalls.length > 0 || toolCalls.length > 0) {
+        console.log('[AUTONOMOUS] ✅ Enforcement successful! Delegation/Tool call now detected.');
       } else {
         console.log('[AUTONOMOUS] ⚠️  Model still refusing to delegate. Proceeding with direct response.');
       }
     }
 
-    if (agentCalls.length > 0) {
-      console.log(
-        `[AUTONOMOUS] 🚀 Delegating to ${agentCalls.length} agent(s):`,
-        agentCalls.map((ac) => ac.name),
-      );
+    if (agentCalls.length > 0 || toolCalls.length > 0) {
+      if (agentCalls.length > 0) {
+        console.log(
+          `[AUTONOMOUS] 🚀 Delegating to ${agentCalls.length} agent(s):`,
+          agentCalls.map((ac) => ac.name),
+        );
+      }
+
+      if (toolCalls.length > 0) {
+        console.log(`[AUTONOMOUS] 🔧 Executing ${toolCalls.length} direct tool call(s)`);
+      }
 
       const agentResults: Array<{ agentName: string; result: string }> = [];
+      const directToolResults: Array<{ name: string; result: any }> = [];
 
       for (const agentCall of agentCalls) {
         const agent = this.agents.find((a) => a.name === agentCall.name);
@@ -629,7 +638,16 @@ REMEMBER: Use tools when they are relevant to the task.`;
         }
       }
 
-      console.log('[AUTONOMOUS] 🔄 Synthesizing results from', agentResults.length, 'agent(s)');
+      // Execute direct tool calls if any
+      if (toolCalls.length > 0) {
+        const toolResults = await this.executeToolCalls(toolCalls, '', generateExecutionId());
+        for (const tr of toolResults) {
+          directToolResults.push({ name: tr.name, result: tr.result });
+          toolsCalled.push(tr.name);
+        }
+      }
+
+      console.log('[AUTONOMOUS] 🔄 Synthesizing results...');
 
       // Priority: runtime systemPrompt > class systemPrompt > default
       let synthesisBasePrompt = options?.systemPrompt || this.systemPrompt;
@@ -661,9 +679,15 @@ REMEMBER: Use tools when they are relevant to the task.`;
         },
         {
           role: 'user',
-          content: `Agent results:\n\n${agentResults
-            .map((ar) => `**${ar.agentName}:**\n${ar.result}`)
-            .join('\n\n')}\n\nPlease synthesize these results into a comprehensive final answer for the user.`,
+          content: `Results to synthesize:\n\n${
+            agentResults.length > 0
+              ? `Agent results:\n${agentResults.map((ar) => `**${ar.agentName}:**\n${ar.result}`).join('\n\n')}\n\n`
+              : ''
+          }${
+            directToolResults.length > 0
+              ? `Direct tool results:\n${directToolResults.map((tr) => `**${tr.name}:**\n${JSON.stringify(tr.result)}`).join('\n\n')}\n\n`
+              : ''
+          }Please synthesize these results into a comprehensive final answer for the user.`,
         },
       ];
 
