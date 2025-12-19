@@ -438,8 +438,6 @@ export default class ZaFlow<TContext = any> {
     let agentCalls = AgentDelegationFormatter.parseAgentCalls(response.content);
     let toolCalls = ToolCallParser.parse(response.content);
 
-    // 🚨 ENFORCEMENT: If no agent calls detected BUT agents are available, force retry
-    // SKIP enforcement if the user message is just a greeting/conversational
     const isConversational = Intent.isConversational(content);
 
     if (agentCalls.length === 0 && toolCalls.length === 0 && this.agents.length > 0 && !isConversational) {
@@ -758,6 +756,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
       }
 
       try {
+        console.log(`[TOOL EXECUTION] 🚀 Executing "${toolCall.name}"...`);
         this.hooks?.onToolCall?.(toolCall.name, toolCall.arguments);
 
         const context: ToolContext<TContext> = {
@@ -774,6 +773,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
         };
 
         const result = await tool.run(toolCall.arguments, context);
+        console.log(`[TOOL EXECUTION] ✅ Tool "${toolCall.name}" completed successfully.`);
 
         this.hooks?.onToolComplete?.(toolCall.name, result);
 
@@ -785,6 +785,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
       } catch (error) {
         const err = error as Error;
         this.hooks?.onToolError?.(toolCall.name, err);
+        console.error(`[TOOL EXECUTION] ❌ Tool "${toolCall.name}" failed:`, err.message);
 
         results.push({
           id: toolCall.id,

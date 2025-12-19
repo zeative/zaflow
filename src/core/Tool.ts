@@ -39,8 +39,22 @@ export class Tool<TSchema extends z.ZodSchema = any> implements ITool<TSchema> {
    * Execute tool with validation, caching, and retry support
    */
   async run(args: any, context: ToolContext): Promise<any> {
-    // Validate arguments
-    const validatedArgs = validate(this.schema, args);
+    let validatedArgs;
+    const validationResult = this.schema.safeParse(args);
+
+    if (validationResult.success) {
+      validatedArgs = validationResult.data;
+    } else if (typeof args === 'object' && args !== null && Object.keys(args).length === 0) {
+      // Try null fallback for empty object
+      const nullResult = this.schema.safeParse(null);
+      if (nullResult.success) {
+        validatedArgs = nullResult.data;
+      } else {
+        throw validationResult.error; // Throw original error if null also fails
+      }
+    } else {
+      throw validationResult.error;
+    }
 
     // Check cache
     if (this.cache) {
