@@ -552,7 +552,9 @@ REMEMBER: Use tools when they are relevant to the task.`;
             { role: 'user', content: agentCall.task },
           ];
 
-          const agentResponse = await this.provider.chat(agentMessages, agent.config || this.config, agent.tools);
+          const agentProvider = agent.getProvider() || this.provider;
+
+          const agentResponse = await agentProvider.chat(agentMessages, agent.config || this.config, agent.tools);
 
           if (agentResponse.usage) {
             totalUsage.prompt += agentResponse.usage.promptTokens;
@@ -577,7 +579,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
             };
 
             const retryMessages = [...agentMessages, { role: 'assistant' as const, content: agentResponse.content }, templateMessage];
-            const retryResponse = await this.provider.chat(retryMessages, agent.config || this.config, agent.tools);
+            const retryResponse = await agentProvider.chat(retryMessages, agent.config || this.config, agent.tools);
 
             if (retryResponse.usage) {
               totalUsage.prompt += retryResponse.usage.promptTokens;
@@ -615,7 +617,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
               },
             ];
 
-            const finalResponse = await this.provider.chat(finalMessages, agent.config || this.config);
+            const finalResponse = await agentProvider.chat(finalMessages, agent.config || this.config);
 
             if (finalResponse.usage) {
               totalUsage.prompt += finalResponse.usage.promptTokens;
