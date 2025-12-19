@@ -327,7 +327,12 @@ export default class ZaFlow<TContext = any> {
     const maxIterations = 10;
 
     while (iterations < maxIterations) {
-      const response = await this.provider.chat(currentMessages, config, this.tools);
+      const agent = options?.agentName ? this.agents.find(a => a.name === options.agentName) : undefined;
+      const provider = agent?.getProvider() || this.provider;
+      const tools = agent?.tools || this.tools;
+      const modelConfig = agent?.config || config;
+
+      const response = await provider.chat(currentMessages, modelConfig, tools);
 
       if (response.usage) {
         totalUsage.prompt += response.usage.promptTokens;
@@ -617,7 +622,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
               },
             ];
 
-            const finalResponse = await agentProvider.chat(finalMessages, agent.config || this.config);
+            const finalResponse = await agentProvider.chat(finalMessages, agent.config || this.config, agent.tools);
 
             if (finalResponse.usage) {
               totalUsage.prompt += finalResponse.usage.promptTokens;

@@ -119,6 +119,8 @@ export interface RunOptions {
   persistContext?: boolean;
   /** Override system prompt for this run */
   systemPrompt?: string;
+  /** Target specific agent for this run (agentic mode) */
+  agentName?: string;
 }
 
 /**
