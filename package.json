@@ -1,7 +1,7 @@
 {
   "name": "zaflow",
   "description": "ZaFlow - Lightweight TypeScript library for building efficient AI agent workflows optimized for free-tier models",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
