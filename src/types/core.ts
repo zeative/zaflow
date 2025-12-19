@@ -118,8 +118,8 @@ export interface RunOptions {
   /** Skip context clearing after run */
   persistContext?: boolean;
   /** Override system prompt for this run */
-  systemPrompt?: string;
-  /** Target specific agent for this run (agentic mode) */
+    systemPrompt?: string;
+    /** Target specific agent for this run (agentic mode) */
   agentName?: string;
 }
 

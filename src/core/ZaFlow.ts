@@ -1,6 +1,6 @@
 import { MemoryStorage } from '../plugins/storage/MemoryStorage';
-import { Intent } from '../utils/Intent';
 import { AgentDelegationFormatter } from '../protocol/AgentDelegation';
+import { ResponseFormatter } from '../protocol/ResponseFormatter';
 import { ToolCallParser } from '../protocol/ToolCallParser';
 import type { Agent } from '../types/agent';
 import type { ContentPart } from '../types/content';
@@ -11,6 +11,7 @@ import type { Provider, ProviderMessage, ToolCall } from '../types/provider';
 import type { StoragePlugin } from '../types/storage';
 import type { Tool, ToolContext } from '../types/tool';
 import { generateExecutionId } from '../utils/id';
+import { Intent } from '../utils/Intent';
 import { semanticSearch } from '../utils/SemanticSearch';
 import { simulateStreaming } from '../utils/streaming';
 import { ContextManager } from './Context';
@@ -293,7 +294,7 @@ export default class ZaFlow<TContext = any> {
   }
 
   private async runSingle(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
-    const messages = this.prepareMessages(options?.systemPrompt);
+    const messages = this.prepareMessages(options?.systemPrompt, this.tools, this.provider);
     const config = { ...this.config, ...options?.config };
 
     const response = await this.provider.chat(messages, config);
@@ -317,7 +318,7 @@ export default class ZaFlow<TContext = any> {
   }
 
   private async runAgentic(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
-    const messages = this.prepareMessages(options?.systemPrompt);
+    const messages = this.prepareMessages(options?.systemPrompt, this.tools, this.provider);
     const config = { ...this.config, ...options?.config };
     const toolsCalled: string[] = [];
     let totalUsage: TokenUsage = { prompt: 0, completion: 0, total: 0 };
@@ -327,12 +328,15 @@ export default class ZaFlow<TContext = any> {
     const maxIterations = 10;
 
     while (iterations < maxIterations) {
-      const agent = options?.agentName ? this.agents.find(a => a.name === options.agentName) : undefined;
+      const agent = options?.agentName ? this.agents.find((a) => a.name === options.agentName) : undefined;
       const provider = agent?.getProvider() || this.provider;
       const tools = agent?.tools || this.tools;
       const modelConfig = agent?.config || config;
 
       const response = await provider.chat(currentMessages, modelConfig, tools);
+
+      // Normalize content
+      response.content = response.content || '';
 
       if (response.usage) {
         totalUsage.prompt += response.usage.promptTokens;
@@ -429,20 +433,23 @@ export default class ZaFlow<TContext = any> {
 
     // Get history and prepare messages
     const historyMessages = this.prepareMessages(baseSystemPrompt);
-    
+
     // Replace the last message (which is the current user message) with the formatted one if needed
     // Actually, prepareMessages already handles the history.
     // But runAutonomous was manually constructing messages.
     // Let's use prepareMessages but override the system prompt.
-    
+
     const messages: ProviderMessage[] = historyMessages;
-    
+
     // Ensure the system message has the agent instructions
     if (messages[0] && messages[0].role === 'system') {
       messages[0].content = systemContent;
     }
 
     const response = await this.provider.chat(messages, this.config);
+
+    // Normalize content
+    response.content = response.content || '';
 
     if (response.usage) {
       totalUsage.prompt += response.usage.promptTokens;
@@ -526,7 +533,12 @@ If the user's request requires specialized processing, please use the <agent_cal
 
           // 🧠 TOOL GUIDELINES: Add tool calling instructions if agent has tools
           if (agent.tools && agent.tools.length > 0) {
-            const toolInstructions = `\n\n📋 TOOL USAGE PROTOCOL
+            const agentProvider = agent.getProvider() || this.provider;
+
+            if (!agentProvider.supportsNativeTools) {
+              agentSystemPrompt += `\n\n${ResponseFormatter.generateToolInstructions(agent.tools, 'xml')}`;
+            } else {
+              const toolInstructions = `\n\n📋 TOOL USAGE PROTOCOL
             
 You have ${agent.tools.length} specialized tool(s) available to help complete this task:
 
@@ -549,7 +561,8 @@ ${agent.tools.map((t) => `- **${t.name}**: ${t.description}`).join('\n')}
 
 REMEMBER: Use tools when they are relevant to the task.`;
 
-            agentSystemPrompt += toolInstructions;
+              agentSystemPrompt += toolInstructions;
+            }
           }
 
           const agentMessages: ProviderMessage[] = [
@@ -697,9 +710,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
         {
           role: 'user',
           content: `Results to synthesize:\n\n${
-            agentResults.length > 0
-              ? `Agent results:\n${agentResults.map((ar) => `**${ar.agentName}:**\n${ar.result}`).join('\n\n')}\n\n`
-              : ''
+            agentResults.length > 0 ? `Agent results:\n${agentResults.map((ar) => `**${ar.agentName}:**\n${ar.result}`).join('\n\n')}\n\n` : ''
           }${
             directToolResults.length > 0
               ? `Direct tool results:\n${directToolResults.map((tr) => `**${tr.name}:**\n${JSON.stringify(tr.result)}`).join('\n\n')}\n\n`
@@ -817,11 +828,19 @@ REMEMBER: Use tools when they are relevant to the task.`;
     return results;
   }
 
-  private prepareMessages(runtimeSystemPrompt?: string): ProviderMessage[] {
+  private prepareMessages(runtimeSystemPrompt?: string, tools?: Tool[], provider?: Provider): ProviderMessage[] {
     const messages: ProviderMessage[] = [];
+    const targetProvider = provider || this.provider;
+    const targetTools = tools || this.tools;
 
     // Priority: runtime systemPrompt > class systemPrompt > default
     let baseSystemPrompt = runtimeSystemPrompt || this.systemPrompt || this.getDefaultSystemPrompt();
+
+    // 🔥 AUTO-INJECT TOOL INSTRUCTIONS FOR NON-NATIVE PROVIDERS
+    if (targetTools.length > 0 && !targetProvider.supportsNativeTools) {
+      const toolInstructions = ResponseFormatter.generateToolInstructions(targetTools, 'xml');
+      baseSystemPrompt = `${baseSystemPrompt}\n\n${toolInstructions}`;
+    }
 
     // Append compiled prompts if any
     const compiledPrompts = this.getCompiledPrompts();

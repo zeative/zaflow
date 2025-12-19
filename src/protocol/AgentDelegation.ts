@@ -84,6 +84,7 @@ ${agentXML}
    * Parse agent delegation from XML in content
    */
   static parseAgentCalls(content: string): Array<{ name: string; task: string }> {
+    if (!content) return [];
     const calls: Array<{ name: string; task: string }> = [];
 
     const regex = /<agent_call[^>]*>(.*?)<\/agent_call>/gs;
@@ -110,6 +111,7 @@ ${agentXML}
    * Check if content contains agent calls
    */
   static hasAgentCalls(content: string): boolean {
+    if (!content) return false;
     return content.includes('<agent_call>');
   }
 }

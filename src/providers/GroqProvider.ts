@@ -17,6 +17,7 @@ export class GroqProvider extends BaseProvider implements Provider {
   type = 'groq';
   private client: Groq;
   declare defaultModel?: string;
+  readonly supportsNativeTools = true;
 
   // Models that support native tool calling
   private static NATIVE_TOOL_CALLING_MODELS = [

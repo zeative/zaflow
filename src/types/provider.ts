@@ -68,6 +68,8 @@ export interface ProviderDefinition {
   timeout?: number;
   /** Rate limiting */
   rateLimit?: RateLimit;
+  /** Whether the provider supports native tool calling */
+  supportsNativeTools?: boolean;
 }
 
 /**
@@ -77,6 +79,8 @@ export interface Provider {
   name: string;
   type: string;
   defaultModel?: string;
+  /** Whether the provider supports native tool calling */
+  readonly supportsNativeTools?: boolean;
 
   /**
    * Send chat completion request

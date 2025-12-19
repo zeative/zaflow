@@ -108,6 +108,8 @@ export class ToolCallParser {
    * Auto-detect and parse tool calls
    */
   static parse(content: string): ToolCall[] {
+    if (!content) return [];
+
     // Try XML first
     if (content.includes('<tool_call>')) {
       const xmlCalls = this.parseXML(content);
@@ -131,6 +133,7 @@ export class ToolCallParser {
    * Check if content contains tool calls
    */
   static hasToolCalls(content: string): boolean {
+    if (!content) return false;
     return content.includes('<tool_call>') || (content.includes('{') && content.includes('"name"'));
   }
 }

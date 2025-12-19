@@ -14,6 +14,7 @@ export class OpenAIProvider extends BaseProvider implements Provider {
   type = 'openai';
   private client: OpenAI;
   declare defaultModel?: string;
+  readonly supportsNativeTools = true;
 
   constructor(apiKey: string, defaultModel?: string) {
     super();

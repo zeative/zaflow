@@ -11,6 +11,7 @@ export class CustomProvider extends BaseProvider implements Provider {
   name: string;
   type = 'custom';
   declare defaultModel?: string;
+  readonly supportsNativeTools: boolean;
   private adapter: ProviderAdapter;
 
   constructor(definition: ProviderDefinition) {
@@ -23,6 +24,7 @@ export class CustomProvider extends BaseProvider implements Provider {
     this.name = definition.name;
     this.defaultModel = definition.defaultModel;
     this.adapter = definition.adapter;
+    this.supportsNativeTools = definition.supportsNativeTools ?? false;
   }
 
   async chat(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): Promise<ProviderResponse> {

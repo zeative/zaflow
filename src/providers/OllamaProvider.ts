@@ -16,6 +16,7 @@ export class OllamaProvider extends BaseProvider implements Provider {
   type = 'ollama';
   private client: Ollama;
   declare defaultModel?: string;
+  readonly supportsNativeTools = false;
 
   constructor(baseURL: string = 'http://localhost:11434', defaultModel?: string) {
     super();
@@ -25,25 +26,8 @@ export class OllamaProvider extends BaseProvider implements Provider {
   }
 
   async chat(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): Promise<ProviderResponse> {
-    // Prepare messages - inject tool system prompt if tools are provided
-    let finalMessages = [...messages];
-
-    if (tools && tools.length > 0) {
-      const toolInstructions = ResponseFormatter.generateToolInstructions(tools, 'xml');
-
-      // Add or append to system message
-      if (finalMessages[0]?.role === 'system') {
-        finalMessages[0] = {
-          ...finalMessages[0],
-          content: `${finalMessages[0].content}\n\n${toolInstructions}`,
-        };
-      } else {
-        finalMessages = [{ role: 'system', content: toolInstructions }, ...finalMessages];
-      }
-    }
-
     // Convert to Ollama format
-    const ollamaMessages = finalMessages.map((msg) => ({
+    const ollamaMessages = messages.map((msg) => ({
       role: msg.role === 'tool' ? 'assistant' : msg.role, // Ollama doesn't have tool role
       content: msg.role === 'tool' ? `Tool result: ${msg.content}` : msg.content,
     }));
@@ -82,23 +66,7 @@ export class OllamaProvider extends BaseProvider implements Provider {
   }
 
   async *stream(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): AsyncIterableIterator<string> {
-    // Prepare messages with tool instructions
-    let finalMessages = [...messages];
-
-    if (tools && tools.length > 0) {
-      const toolInstructions = ResponseFormatter.generateToolInstructions(tools, 'xml');
-
-      if (finalMessages[0]?.role === 'system') {
-        finalMessages[0] = {
-          ...finalMessages[0],
-          content: `${finalMessages[0].content}\n\n${toolInstructions}`,
-        };
-      } else {
-        finalMessages = [{ role: 'system', content: toolInstructions }, ...finalMessages];
-      }
-    }
-
-    const ollamaMessages = finalMessages.map((msg) => ({
+    const ollamaMessages = messages.map((msg) => ({
       role: msg.role === 'tool' ? 'assistant' : msg.role,
       content: msg.role === 'tool' ? `Tool result: ${msg.content}` : msg.content,
     }));

@@ -166,6 +166,10 @@ export class ToolIntelligence {
    * 🌟 MULTI-LAYER CASCADE
    */
   static extractToolCallsWithFallback(response: string, task: string, availableTools: Tool[], nativeToolCalls?: ToolCall[]): ToolCall[] {
+    if (!response && (!nativeToolCalls || nativeToolCalls.length === 0)) {
+      return [];
+    }
+
     // Layer 1: Native
     if (nativeToolCalls && nativeToolCalls.length > 0) {
       console.log('[TOOL INTELLIGENCE] ✅ Layer 1: Native');
