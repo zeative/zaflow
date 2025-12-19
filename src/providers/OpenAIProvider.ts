@@ -1,9 +1,10 @@
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import type { Provider, ProviderMessage, ProviderResponse } from '../types/provider';
 import type { ModelConfig } from '../types/core';
 import type { Tool } from '../types/tool';
 import { BaseProvider } from '../core/Provider';
 import { ResponseFormatter } from '../protocol/ResponseFormatter';
+import { LazyLoader } from '../utils/LazyLoader';
 
 /**
  * OpenAI provider implementation
@@ -16,7 +17,8 @@ export class OpenAIProvider extends BaseProvider implements Provider {
 
   constructor(apiKey: string, defaultModel?: string) {
     super();
-    this.client = new OpenAI({ apiKey });
+    const OpenAIClass = LazyLoader.load<any>('openai', 'OpenAI');
+    this.client = new OpenAIClass({ apiKey });
     this.defaultModel = defaultModel || 'gpt-4-turbo-preview';
   }
 

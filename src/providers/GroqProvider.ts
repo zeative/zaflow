@@ -1,10 +1,11 @@
-import Groq from 'groq-sdk';
+import type Groq from 'groq-sdk';
 import type { Provider, ProviderMessage, ProviderResponse } from '../types/provider';
 import type { ModelConfig } from '../types/core';
 import type { Tool } from '../types/tool';
 import { BaseProvider } from '../core/Provider';
 import { ResponseFormatter } from '../protocol/ResponseFormatter';
 import { ToolCallParser } from '../protocol/ToolCallParser';
+import { LazyLoader } from '../utils/LazyLoader';
 
 /**
  * Groq provider with dual protocol support
@@ -29,7 +30,8 @@ export class GroqProvider extends BaseProvider implements Provider {
 
   constructor(apiKey: string, defaultModel?: string) {
     super();
-    this.client = new Groq({ apiKey });
+    const GroqClass = LazyLoader.load<any>('groq-sdk', 'Groq');
+    this.client = new GroqClass({ apiKey });
     this.defaultModel = defaultModel || 'moonshotai/kimi-k2-instruct-0905';
   }
 

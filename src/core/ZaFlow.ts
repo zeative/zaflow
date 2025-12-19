@@ -14,6 +14,7 @@ import { generateExecutionId } from '../utils/id';
 import { semanticSearch } from '../utils/SemanticSearch';
 import { simulateStreaming } from '../utils/streaming';
 import { ContextManager } from './Context';
+import { HistoryManager } from './History';
 import { MediaProcessor } from './MediaProcessor';
 import { SharedMemoryPool } from './Memory';
 
@@ -30,7 +31,7 @@ export default class ZaFlow<TContext = any> {
   private sharedMemory: SharedMemoryPool;
   private storage: StoragePlugin;
   private hooks?: Hooks;
-  private history: Message[] = [];
+  private historyManager: HistoryManager;
   private systemPrompt?: string;
   private prompts: Array<{ prompt: string; context?: any }> = [];
   private mediaProcessor: MediaProcessor; // 🔥 Genius Media Processor
@@ -47,6 +48,7 @@ export default class ZaFlow<TContext = any> {
     this.contextManager = new ContextManager<TContext>(this.hooks);
     this.sharedMemory = new SharedMemoryPool(this.hooks);
     this.storage = options.storage || new MemoryStorage();
+    this.historyManager = new HistoryManager(options.historyConfig);
     this.mediaProcessor = new MediaProcessor(this.tools); // 🔥 Initialize processor
   }
 
@@ -63,15 +65,15 @@ export default class ZaFlow<TContext = any> {
   }
 
   getHistory(): Message[] {
-    return [...this.history];
+    return this.historyManager.getHistory();
   }
 
   loadHistory(history: Message[]): void {
-    this.history = [...history];
+    this.historyManager.loadHistory(history);
   }
 
   clearHistory(): void {
-    this.history = [];
+    this.historyManager.clear();
   }
 
   /**
@@ -129,7 +131,7 @@ export default class ZaFlow<TContext = any> {
       }
 
       this.hooks?.onStart?.(getTextContent(userMessage.content));
-      this.history.push(userMessage);
+      this.historyManager.addMessage(userMessage);
 
       // 🔥 AUTO-DETECT AND PROCESS MEDIA
       if (hasMedia(userMessage.content)) {
@@ -140,7 +142,7 @@ export default class ZaFlow<TContext = any> {
           userContext: this.getContext(),
           sharedMemory: this.sharedMemory,
           agentName: 'main',
-          conversationHistory: this.history,
+          conversationHistory: this.getHistory(),
           metadata: { executionId, timestamp: Date.now(), mode: this.mode },
           storage: this.storage,
         };
@@ -149,7 +151,7 @@ export default class ZaFlow<TContext = any> {
 
         if (summary) {
           // Inject analysis results into history
-          this.history.push({ role: 'system', content: summary });
+          this.historyManager.addMessage({ role: 'system', content: summary });
           console.log('[ZaFlow] ✅ Media processing complete, results injected into context');
         }
       }
@@ -202,7 +204,7 @@ export default class ZaFlow<TContext = any> {
           throw new Error(`Unknown mode: ${this.mode}`);
       }
 
-      this.history.push({ role: 'assistant', content: response.content });
+      this.historyManager.addMessage({ role: 'assistant', content: response.content });
 
       if (response.metadata) {
         response.metadata.executionTime = Date.now() - startTime;
@@ -234,7 +236,7 @@ export default class ZaFlow<TContext = any> {
   async *stream(message: string | Message | ContentPart[], options?: StreamOptions): AsyncIterableIterator<string> {
     const textMessage = typeof message === 'string' ? message : getTextContent(Array.isArray(message) ? message : message.content);
     this.hooks?.onStart?.(textMessage);
-    this.history.push({ role: 'user', content: typeof message === 'string' ? message : Array.isArray(message) ? message : message.content });
+    this.historyManager.addMessage({ role: 'user', content: typeof message === 'string' ? message : Array.isArray(message) ? message : message.content });
 
     // Complex modes (AGENTIC, AUTONOMOUS) need full execution before streaming
     // because tool calling and agent delegation can't be truly streamed
@@ -272,7 +274,7 @@ export default class ZaFlow<TContext = any> {
         }
 
         this.hooks?.onStreamComplete?.(fullText);
-        this.history.push({ role: 'assistant', content: fullText });
+        this.historyManager.addMessage({ role: 'assistant', content: fullText });
       } else {
         const response = await this.run(message, { persistContext: options?.persistContext, systemPrompt: options?.systemPrompt });
 
@@ -420,10 +422,20 @@ export default class ZaFlow<TContext = any> {
       content = `[QUOTED MESSAGE]\nRole: ${role.toUpperCase()}\nContent: "${quotedText}"\n---\n\n${content}`;
     }
 
-    const messages: ProviderMessage[] = [
-      { role: 'system', content: systemContent },
-      { role: 'user', content },
-    ];
+    // Get history and prepare messages
+    const historyMessages = this.prepareMessages(baseSystemPrompt);
+    
+    // Replace the last message (which is the current user message) with the formatted one if needed
+    // Actually, prepareMessages already handles the history.
+    // But runAutonomous was manually constructing messages.
+    // Let's use prepareMessages but override the system prompt.
+    
+    const messages: ProviderMessage[] = historyMessages;
+    
+    // Ensure the system message has the agent instructions
+    if (messages[0] && messages[0].role === 'system') {
+      messages[0].content = systemContent;
+    }
 
     const response = await this.provider.chat(messages, this.config);
 
@@ -763,7 +775,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
           userContext: this.getContext(),
           sharedMemory: this.sharedMemory,
           agentName,
-          conversationHistory: this.history,
+          conversationHistory: this.getHistory(),
           metadata: {
             executionId,
             timestamp: Date.now(),
@@ -812,7 +824,9 @@ REMEMBER: Use tools when they are relevant to the task.`;
 
     messages.push({ role: 'system', content: baseSystemPrompt });
 
-    for (const msg of this.history) {
+    const history = this.historyManager.getHistory();
+
+    for (const msg of history) {
       // Convert multimodal content to string for providers that don't support it
       let content = typeof msg.content === 'string' ? msg.content : getTextContent(msg.content);
 

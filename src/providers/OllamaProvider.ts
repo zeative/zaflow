@@ -1,10 +1,11 @@
-import { Ollama } from 'ollama';
+import type { Ollama } from 'ollama';
 import type { Provider, ProviderMessage, ProviderResponse } from '../types/provider';
 import type { ModelConfig } from '../types/core';
 import type { Tool } from '../types/tool';
 import { BaseProvider } from '../core/Provider';
 import { ResponseFormatter } from '../protocol/ResponseFormatter';
 import { ToolCallParser } from '../protocol/ToolCallParser';
+import { LazyLoader } from '../utils/LazyLoader';
 
 /**
  * Ollama provider implementation
@@ -18,7 +19,8 @@ export class OllamaProvider extends BaseProvider implements Provider {
 
   constructor(baseURL: string = 'http://localhost:11434', defaultModel?: string) {
     super();
-    this.client = new Ollama({ host: baseURL });
+    const { Ollama: OllamaClass } = LazyLoader.load<any>('ollama', 'Ollama');
+    this.client = new OllamaClass({ host: baseURL });
     this.defaultModel = defaultModel || 'llama3.1:8b';
   }
 
