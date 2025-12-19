@@ -1,77 +1,13 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 
 /**
  * Convert Zod schema to JSON Schema
- * Simplified converter for basic types
+ * Uses Zod 4 native toJSONSchema
  */
-export function zodToJsonSchema(schema: z.ZodSchema): any {
-  const zodType = (schema as any)._def.typeName;
-
-  // Handle different Zod types
-  switch (zodType) {
-    case 'ZodString':
-      return { type: 'string', description: (schema as any)._def.description };
-
-    case 'ZodNumber':
-      return { type: 'number', description: (schema as any)._def.description };
-
-    case 'ZodBoolean':
-      return { type: 'boolean', description: (schema as any)._def.description };
-
-    case 'ZodArray':
-      return {
-        type: 'array',
-        items: zodToJsonSchema((schema as any)._def.type),
-        description: (schema as any)._def.description,
-      };
-
-    case 'ZodObject':
-      const shape = (schema as any)._def.shape();
-      const properties: any = {};
-      const required: string[] = [];
-
-      for (const key in shape) {
-        properties[key] = zodToJsonSchema(shape[key]);
-
-        // Check if field is optional
-        if (shape[key]._def.typeName !== 'ZodOptional') {
-          required.push(key);
-        }
-      }
-
-      return {
-        type: 'object',
-        properties,
-        required: required.length > 0 ? required : undefined,
-        description: (schema as any)._def.description,
-      };
-
-    case 'ZodEnum':
-      return {
-        type: 'string',
-        enum: (schema as any)._def.values,
-        description: (schema as any)._def.description,
-      };
-
-    case 'ZodOptional':
-      return zodToJsonSchema((schema as any)._def.innerType);
-
-    case 'ZodDefault':
-      const innerSchema = zodToJsonSchema((schema as any)._def.innerType);
-      return {
-        ...innerSchema,
-        default: (schema as any)._def.defaultValue(),
-      };
-
-    case 'ZodUnion':
-      return {
-        oneOf: (schema as any)._def.options.map((opt: any) => zodToJsonSchema(opt)),
-        description: (schema as any)._def.description,
-      };
-
-    default:
-      return { type: 'string', description: 'Unknown type' };
-  }
+export function zodToJsonSchema(schema: z.ZodSchema) {
+  const schemas = z.toJSONSchema(schema);
+  delete schemas.$schema;
+  return schemas;
 }
 
 /**
