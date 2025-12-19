@@ -134,12 +134,32 @@ export class ToolIntelligence {
   }
 
   /**
-   * Template generator
+   * Template generator - dynamic based on schema
    */
   static generateFillableTemplate(tools: Tool[], task: string): string {
     if (tools.length === 0) return '';
     const tool = tools[0];
-    return `\n\n📝 TEMPLATE:\n<tool_call>\n<name>${tool.name}</name>\n<arguments>{"data": "${task.substring(0, 50)}..."}</arguments>\n</tool_call>\nCOPY THIS.`;
+    const schema = tool.toJSONSchema();
+    const properties = schema.properties || {};
+    const template: Record<string, any> = {};
+
+    for (const [name, prop] of Object.entries(properties) as [string, any][]) {
+      if (prop.type === 'array') {
+        template[name] = [];
+      } else if (prop.type === 'object') {
+        template[name] = {};
+      } else if (prop.enum) {
+        template[name] = prop.enum[0];
+      } else if (prop.type === 'number') {
+        template[name] = 0;
+      } else if (prop.type === 'boolean') {
+        template[name] = false;
+      } else {
+        template[name] = '...';
+      }
+    }
+
+    return `\n\n📝 TEMPLATE:\n<tool_call>\n<name>${tool.name}</name>\n<arguments>${JSON.stringify(template)}</arguments>\n</tool_call>\nCOPY THIS.`;
   }
 
   /**

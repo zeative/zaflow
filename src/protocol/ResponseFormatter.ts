@@ -19,10 +19,10 @@ export class ResponseFormatter {
 
       for (const [paramName, paramSchema] of Object.entries(params) as [string, any][]) {
         const isRequired = required.includes(paramName);
-        const type = paramSchema.type || 'string';
+        const typeInfo = this.formatParamType(paramSchema);
         const desc = paramSchema.description || '';
 
-        xml += `    <param name="${paramName}" type="${type}" required="${isRequired}" desc="${desc}"/>\n`;
+        xml += `    <param name="${paramName}" type="${typeInfo}" required="${isRequired}" desc="${desc}"/>\n`;
       }
 
       xml += `  </tool>\n`;
@@ -31,6 +31,31 @@ export class ResponseFormatter {
     xml += '</tools>';
 
     return xml;
+  }
+
+  /**
+   * Helper to format parameter type information recursively
+   */
+  private static formatParamType(schema: any): string {
+    if (!schema) return 'any';
+
+    if (schema.enum) {
+      return `enum(${schema.enum.join('|')})`;
+    }
+
+    if (schema.type === 'array') {
+      const itemType = this.formatParamType(schema.items);
+      return `array(${itemType})`;
+    }
+
+    if (schema.type === 'object' && schema.properties) {
+      const props = Object.entries(schema.properties)
+        .map(([name, s]) => `${name}:${this.formatParamType(s)}`)
+        .join(', ');
+      return `object({${props}})`;
+    }
+
+    return schema.type || 'any';
   }
 
   /**
