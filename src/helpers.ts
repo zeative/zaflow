@@ -126,10 +126,12 @@ export const msg = {
     const quotedContent =
       typeof quotedMsg.content === 'string'
         ? quotedMsg.content
-        : quotedMsg.content
+        : Array.isArray(quotedMsg.content)
+        ? quotedMsg.content
             .filter((p) => p.type === 'text')
-            .map((p) => p.text)
-            .join(' ');
+            .map((p) => (p as any).text || '')
+            .join(' ')
+        : '';
 
     return {
       role: 'user',
