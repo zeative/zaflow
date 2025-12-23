@@ -20,7 +20,9 @@ export class OllamaProvider extends BaseProvider implements Provider {
 
   constructor(baseURL: string = 'http://localhost:11434', defaultModel?: string) {
     super();
-    const { Ollama: OllamaClass } = LazyLoader.load<any>('ollama', 'Ollama');
+    const mod = LazyLoader.load<any>('ollama', 'Ollama');
+    // Handle both: module.Ollama (named export) and module.default.Ollama (ESM)
+    const OllamaClass = mod.Ollama || mod.default?.Ollama || mod.default || mod;
     this.client = new OllamaClass({ host: baseURL });
     this.defaultModel = defaultModel || 'llama3.1:8b';
   }

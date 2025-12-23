@@ -18,7 +18,9 @@ export class OpenAIProvider extends BaseProvider implements Provider {
 
   constructor(apiKey: string, defaultModel?: string) {
     super();
-    const OpenAIClass = LazyLoader.load<any>('openai', 'OpenAI');
+    const mod = LazyLoader.load<any>('openai', 'OpenAI');
+    // Handle both: module.default (ESM) and module itself (CJS)
+    const OpenAIClass = mod.default || mod.OpenAI || mod;
     this.client = new OpenAIClass({ apiKey });
     this.defaultModel = defaultModel || 'gpt-4-turbo-preview';
   }

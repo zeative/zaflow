@@ -31,7 +31,9 @@ export class GroqProvider extends BaseProvider implements Provider {
 
   constructor(apiKey: string, defaultModel?: string) {
     super();
-    const GroqClass = LazyLoader.load<any>('groq-sdk', 'Groq');
+    const mod = LazyLoader.load<any>('groq-sdk', 'Groq');
+    // Handle both: module.default (ESM) and module itself (CJS)
+    const GroqClass = mod.default || mod.Groq || mod;
     this.client = new GroqClass({ apiKey });
     this.defaultModel = defaultModel || 'moonshotai/kimi-k2-instruct-0905';
   }
