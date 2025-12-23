@@ -417,9 +417,10 @@ export default class ZaFlow<TContext = any> {
       });
 
       for (const result of toolResults) {
+        const content = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
         currentMessages.push({
           role: 'tool',
-          content: JSON.stringify(result.result),
+          content,
           name: result.name,
           toolCallId: result.id,
         });
@@ -733,7 +734,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
               },
               ...toolResults.map((tr) => ({
                 role: 'tool' as const,
-                content: JSON.stringify(tr.result),
+                content: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
                 name: tr.name,
                 toolCallId: tr.id,
               })),
@@ -824,11 +825,17 @@ REMEMBER: Use tools when they are relevant to the task.`;
           role: 'user',
           content: `Results to synthesize:\n\n${
             agentResults.length > 0 ? `Agent results:\n${agentResults.map((ar) => `**${ar.agentName}:**\n${ar.result}`).join('\n\n')}\n\n` : ''
-          }${
+      }${
             directToolResults.length > 0
-              ? `Direct tool results:\n${directToolResults.map((tr) => `**${tr.name}:**\n${JSON.stringify(tr.result)}`).join('\n\n')}\n\n`
+              ? `Direct tool results:\n${directToolResults.map((tr) => `**${tr.name}:**\n${typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)}`).join('\n\n')}\n\n`
               : ''
-          }Please synthesize these results into a comprehensive final answer for the user.`,
+          }
+          
+[SYSTEM GROUNDING]: Below are the RAW tool results that were executed. You MUST use this data for your final answer. Do NOT hallucinate information not present in these results.
+
+${agentResults.map(ar => `--- AGENT: ${ar.agentName} ---\n${ar.result}`).join('\n\n')}
+
+Please synthesize these results into a comprehensive final answer for the user.`,
         },
       ];
 
