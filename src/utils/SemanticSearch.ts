@@ -1,4 +1,6 @@
-import { TfIdf, SentenceTokenizer } from 'natural';
+import natural from 'natural';
+
+const { TfIdf, SentenceTokenizer } = natural;
 
 /**
  * 🧠 Local Context Search Engine (Lightweight TF-IDF)
