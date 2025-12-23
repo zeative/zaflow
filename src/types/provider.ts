@@ -1,5 +1,6 @@
 import type { Tool } from './tool';
 import type { ModelConfig } from './core';
+import type { ContentPart } from './content';
 
 /**
  * Tool call structure
@@ -26,10 +27,11 @@ export interface ProviderResponse {
 
 /**
  * Message for provider
+ * 🔥 content supports multimodal (string | ContentPart[]) for vision/audio models
  */
 export interface ProviderMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | ContentPart[];
   name?: string;
   toolCallId?: string;
   toolCalls?: ToolCall[];

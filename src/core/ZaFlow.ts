@@ -853,15 +853,21 @@ REMEMBER: Use tools when they are relevant to the task.`;
     const history = this.historyManager.getHistory();
 
     for (const msg of history) {
-      // Convert multimodal content to string for providers that don't support it
-      let content = typeof msg.content === 'string' ? msg.content : getTextContent(msg.content);
+      // 🔥 PRESERVE MULTIMODAL CONTENT - pass as-is for vision/audio models
+      let content: string | ContentPart[] = msg.content;
 
-      // 🔥 Format quoted message if present
+      // 🔥 Format quoted message if present - prepend to text content
       if (msg.quotedMessage) {
         const quotedRole = msg.quotedMessage.role.toUpperCase();
         const quotedText = msg.quotedMessage.content.length > 100 ? msg.quotedMessage.content.substring(0, 100) + '...' : msg.quotedMessage.content;
+        const quotePrefix = `[QUOTED MESSAGE]\nRole: ${quotedRole}\nContent: "${quotedText}"\n---\n\n`;
 
-        content = `[QUOTED MESSAGE]\nRole: ${quotedRole}\nContent: "${quotedText}"\n---\n\n${content}`;
+        if (typeof content === 'string') {
+          content = quotePrefix + content;
+        } else if (Array.isArray(content)) {
+          // For multimodal content, prepend quote as text part
+          content = [{ type: 'text', text: quotePrefix + getTextContent(content) }, ...content.filter((p) => p.type !== 'text')];
+        }
       }
 
       messages.push({
