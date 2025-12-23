@@ -72,6 +72,8 @@ export interface ProviderDefinition {
   rateLimit?: RateLimit;
   /** Whether the provider supports native tool calling */
   supportsNativeTools?: boolean;
+  /** Whether the provider supports vision (images) */
+  supportsVision?: boolean;
 }
 
 /**
@@ -83,6 +85,8 @@ export interface Provider {
   defaultModel?: string;
   /** Whether the provider supports native tool calling */
   readonly supportsNativeTools?: boolean;
+  /** Whether the provider supports vision (images) */
+  readonly supportsVision?: boolean;
 
   /**
    * Send chat completion request

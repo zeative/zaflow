@@ -511,7 +511,23 @@ export default class ZaFlow<TContext = any> {
     // 🔥 Replace last user message with properly formatted content (including media from quote)
     const lastMessageIndex = messages.length - 1;
     if (lastMessageIndex > 0 && messages[lastMessageIndex].role === 'user') {
-      messages[lastMessageIndex].content = formattedContent;
+      let finalContent = formattedContent;
+
+      // 🔥 CAPABILITY-BASED ROUTING: Strip media if provider doesn't support vision
+      if (hasMedia(finalContent) && !this.provider.supportsVision) {
+        const textOnly = getTextContent(finalContent);
+        const mediaParts = extractMediaParts(finalContent);
+        
+        console.log(`[AUTONOMOUS] ⚠️ Provider "${this.provider.name}" does NOT support vision. Stripping ${mediaParts.length} media item(s).`);
+        
+        const hint = `\n\n[SYSTEM ALERT]: The user has provided ${mediaParts.length} media item(s) (images/files) which you CANNOT see directly because your current model configuration does not support vision. 
+        
+HOWEVER, you have specialized agents available that CAN see and analyze these items. 
+Please DELEGATE the analysis to the appropriate agent (e.g., "Image Agent") using the <agent_call> format if you need to understand the media content to answer the user.`;
+        finalContent = textOnly + hint;
+      }
+
+      messages[lastMessageIndex].content = finalContent;
     }
 
     const response = await this.provider.chat(messages, this.config);
@@ -789,12 +805,17 @@ REMEMBER: Use tools when they are relevant to the task.`;
         synthesisBasePrompt = `${synthesisBasePrompt}\n\n${compiledPrompts}`;
       }
 
+      let synthesisUserContent = formattedContent;
+      if (hasMedia(synthesisUserContent) && !this.provider.supportsVision) {
+        synthesisUserContent = getTextContent(synthesisUserContent);
+      }
+
       const synthesisMessages: ProviderMessage[] = [
         {
           role: 'system',
           content: synthesisBasePrompt,
         },
-        { role: 'user', content: formattedContent },
+        { role: 'user', content: synthesisUserContent },
         {
           role: 'assistant',
           content: response.content,
@@ -971,6 +992,25 @@ REMEMBER: Use tools when they are relevant to the task.`;
             ...quotedMediaParts,
             ...content.filter((p) => p.type !== 'text'),
           ];
+        }
+      }
+
+      // 🔥 CAPABILITY-BASED ROUTING: Strip media if provider doesn't support vision
+      if (hasMedia(content) && !targetProvider.supportsVision) {
+        const textOnly = getTextContent(content);
+        const mediaParts = extractMediaParts(content);
+        
+        console.log(`[PREPARE] ⚠️ Provider "${targetProvider.name}" does NOT support vision. Stripping ${mediaParts.length} media item(s).`);
+        
+        // Only add hint for the last user message in autonomous mode to avoid cluttering history
+        if (this.mode === 'autonomous' && msg === history[history.length - 1] && msg.role === 'user') {
+          const hint = `\n\n[SYSTEM ALERT]: The user has provided ${mediaParts.length} media item(s) (images/files) which you CANNOT see directly because your current model configuration does not support vision. 
+          
+HOWEVER, you have specialized agents available that CAN see and analyze these items. 
+Please DELEGATE the analysis to the appropriate agent (e.g., "Image Agent") using the <agent_call> format if you need to understand the media content to answer the user.`;
+          content = textOnly + hint;
+        } else {
+          content = textOnly;
         }
       }
 
