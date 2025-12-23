@@ -74,4 +74,9 @@ export interface Agent {
    * Get the provider for this agent
    */
   getProvider(): Provider | undefined;
+
+  /**
+   * Check if agent can handle a specific media type
+   */
+  canHandleMedia(mediaType: string): boolean;
 }

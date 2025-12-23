@@ -86,4 +86,28 @@ export class Agent implements IAgent {
   getProvider(): Provider | undefined {
     return this.provider;
   }
+
+  /**
+   * Check if agent can handle a specific media type
+   */
+  canHandleMedia(mediaType: string): boolean {
+    // 1. Check explicit capabilities
+    if (this.hasCapability(mediaType) || this.hasCapability(`${mediaType}-analyzer`) || this.hasCapability(`${mediaType}-processor`)) {
+      return true;
+    }
+
+    // 2. Check role (e.g., "image-analyzer", "vision-expert")
+    const roleLower = this.role.toLowerCase();
+    if (roleLower.includes(mediaType) || (mediaType === 'image' && roleLower.includes('vision'))) {
+      return true;
+    }
+
+    // 3. Check name (e.g., "Image Agent")
+    const nameLower = this.name.toLowerCase();
+    if (nameLower.includes(mediaType)) {
+      return true;
+    }
+
+    return false;
+  }
 }

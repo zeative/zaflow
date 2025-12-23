@@ -633,9 +633,33 @@ REMEMBER: Use tools when they are relevant to the task.`;
             }
           }
 
+          // 🔥 SMART MEDIA ROUTING: Pass media to agent if it can handle it
+          const currentMediaParts = hasMedia(userMessage.content) ? extractMediaParts(userMessage.content) : [];
+          const quotedMediaParts = userMessage.quotedMessage && hasMedia(userMessage.quotedMessage.content) 
+            ? extractMediaParts(userMessage.quotedMessage.content) 
+            : [];
+          
+          const allMediaParts = [...quotedMediaParts, ...currentMediaParts];
+          let agentUserContent: string | ContentPart[] = agentCall.task;
+
+          if (allMediaParts.length > 0) {
+            const capableMediaParts = allMediaParts.filter(part => {
+              const mediaType = part.type === 'image_url' ? 'image' : (part.type as string);
+              return agent.canHandleMedia(mediaType);
+            });
+
+            if (capableMediaParts.length > 0) {
+              console.log(`[AUTONOMOUS] 🖼️ Routing ${capableMediaParts.length} media item(s) to capable agent: ${agent.name}`);
+              agentUserContent = [
+                { type: 'text', text: agentCall.task },
+                ...capableMediaParts
+              ];
+            }
+          }
+
           const agentMessages: ProviderMessage[] = [
             { role: 'system', content: agentSystemPrompt },
-            { role: 'user', content: agentCall.task },
+            { role: 'user', content: agentUserContent },
           ];
 
           const agentProvider = agent.getProvider() || this.provider;
