@@ -157,32 +157,69 @@ export default class ZaFlow<TContext = any> {
         }
       }
 
-      // 🔥 AUTO-PROCESS QUOTED MESSAGES (Semantic Search)
+      // 🔥 AUTO-PROCESS QUOTED MESSAGES (Media + Semantic Search)
       if (userMessage.quotedMessage) {
         const { content: quotedContent } = userMessage.quotedMessage;
         const config = userMessage.quotedMessage.config || { strategy: 'semantic' };
         const replyText = getTextContent(userMessage.content);
         const strategy = config.strategy || 'semantic';
 
-        if (strategy === 'semantic' && quotedContent.length > 300) {
+        // 🔥 NEW: Process media from quoted message!
+        if (hasMedia(quotedContent)) {
+          const quotedMediaParts = extractMediaParts(quotedContent);
+          console.log(`[ZaFlow] 🎯 Auto-detected ${quotedMediaParts.length} media item(s) from quoted message`);
+
+          const toolContext: ToolContext<TContext> = {
+            userContext: this.getContext(),
+            sharedMemory: this.sharedMemory,
+            agentName: 'main',
+            conversationHistory: this.getHistory(),
+            metadata: { executionId, timestamp: Date.now(), mode: this.mode },
+            storage: this.storage,
+          };
+
+          const { summary } = await this.mediaProcessor.process(quotedMediaParts, toolContext);
+
+          if (summary) {
+            // Inject quoted media analysis results into history
+            this.historyManager.addMessage({ role: 'system', content: `[QUOTED MESSAGE MEDIA]\n${summary}` });
+            console.log('[ZaFlow] ✅ Quoted message media processing complete, results injected into context');
+          }
+        }
+
+        // Handle text content from quoted message (semantic search)
+        const quotedTextContent = getTextContent(quotedContent);
+        if (strategy === 'semantic' && quotedTextContent.length > 300) {
           try {
             console.log('[ZaFlow] 🧠 Starting semantic search for quoted message...');
             await semanticSearch.initialize();
 
-            const processedQuote = await semanticSearch.findRelevantContext(quotedContent, replyText, {
+            const processedQuote = await semanticSearch.findRelevantContext(quotedTextContent, replyText, {
               maxChunks: config.semanticOptions?.maxChunks || 3,
               minSimilarity: config.semanticOptions?.minSimilarity || 0.3,
               maxChunkLength: config.semanticOptions?.maxChunkLength || 200,
             });
 
-            console.log(`[ZaFlow] 🧠 Semantic extraction: ${quotedContent.length} → ${processedQuote.length} chars`);
-            userMessage.quotedMessage.content = processedQuote;
+            console.log(`[ZaFlow] 🧠 Semantic extraction: ${quotedTextContent.length} → ${processedQuote.length} chars`);
+            // Update quoted message content with processed text (keep media parts intact)
+            if (typeof quotedContent === 'string') {
+              userMessage.quotedMessage.content = processedQuote;
+            } else {
+              // For ContentPart[], update text parts only
+              userMessage.quotedMessage.content = quotedContent.map((part) =>
+                part.type === 'text' ? { type: 'text', text: processedQuote } as ContentPart : part,
+              );
+            }
           } catch (error) {
             console.warn('[ZaFlow] Semantic search failed, falling back to truncate:', error);
-            userMessage.quotedMessage.content = quotedContent.substring(0, config.maxLength || 300) + '...';
+            if (typeof quotedContent === 'string') {
+              userMessage.quotedMessage.content = quotedTextContent.substring(0, config.maxLength || 300) + '...';
+            }
           }
-        } else if (strategy === 'truncate' && quotedContent.length > (config.maxLength || 300)) {
-          userMessage.quotedMessage.content = quotedContent.substring(0, config.maxLength || 300) + '...';
+        } else if (strategy === 'truncate' && quotedTextContent.length > (config.maxLength || 300)) {
+          if (typeof quotedContent === 'string') {
+            userMessage.quotedMessage.content = quotedTextContent.substring(0, config.maxLength || 300) + '...';
+          }
         }
       }
 
@@ -424,11 +461,36 @@ export default class ZaFlow<TContext = any> {
     // Merge base system prompt with agent instructions
     const systemContent = `${baseSystemPrompt}\n\n---\n\n${agentInstructions}`;
 
-    // 🔥 Format content with quoted message
-    let content = getTextContent(userMessage.content);
+    // 🔥 Format content with quoted message (now supports media!)
+    // For vision models, we need to include the actual image data, not just text
+    let formattedContent: string | ContentPart[];
+
     if (userMessage.quotedMessage) {
-      const { role, content: quotedText } = userMessage.quotedMessage;
-      content = `[QUOTED MESSAGE]\nRole: ${role.toUpperCase()}\nContent: "${quotedText}"\n---\n\n${content}`;
+      const { role, content: quotedContent } = userMessage.quotedMessage;
+      const quotedText = getTextContent(quotedContent);
+      const quotePrefix = `[QUOTED MESSAGE]\nRole: ${role.toUpperCase()}\nContent: "${quotedText}"\n---\n\n`;
+
+      // 🔥 Check if quoted message has media
+      const quotedMediaParts = hasMedia(quotedContent) ? extractMediaParts(quotedContent) : [];
+      const userMediaParts = hasMedia(userMessage.content) ? extractMediaParts(userMessage.content) : [];
+      const userTextContent = getTextContent(userMessage.content);
+
+      if (quotedMediaParts.length > 0 || userMediaParts.length > 0) {
+        // Build multimodal content: text prefix + media from both + user question
+        formattedContent = [
+          { type: 'text', text: quotePrefix + userTextContent } as ContentPart,
+          ...quotedMediaParts,
+          ...userMediaParts,
+        ];
+        console.log(
+          `[AUTONOMOUS] 🖼️ Including ${quotedMediaParts.length} media from quote and ${userMediaParts.length} media from current message`,
+        );
+      } else {
+        // No media in either, just use text
+        formattedContent = quotePrefix + userTextContent;
+      }
+    } else {
+      formattedContent = userMessage.content;
     }
 
     // Get history and prepare messages
@@ -444,6 +506,12 @@ export default class ZaFlow<TContext = any> {
     // Ensure the system message has the agent instructions
     if (messages[0] && messages[0].role === 'system') {
       messages[0].content = systemContent;
+    }
+
+    // 🔥 Replace last user message with properly formatted content (including media from quote)
+    const lastMessageIndex = messages.length - 1;
+    if (lastMessageIndex > 0 && messages[lastMessageIndex].role === 'user') {
+      messages[lastMessageIndex].content = formattedContent;
     }
 
     const response = await this.provider.chat(messages, this.config);
@@ -462,7 +530,7 @@ export default class ZaFlow<TContext = any> {
     let agentCalls = AgentDelegationFormatter.parseAgentCalls(response.content);
     let toolCalls = ToolCallParser.parse(response.content);
 
-    const isConversational = Intent.isConversational(content);
+    const isConversational = Intent.isConversational(getTextContent(formattedContent));
 
     if (agentCalls.length === 0 && toolCalls.length === 0 && this.agents.length > 0 && !isConversational) {
       console.log('[AUTONOMOUS] ⚠️  No agent delegation detected, but agents are available. Enforcing delegation...');
@@ -702,7 +770,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
           role: 'system',
           content: synthesisBasePrompt,
         },
-        { role: 'user', content },
+        { role: 'user', content: formattedContent },
         {
           role: 'assistant',
           content: response.content,
@@ -859,14 +927,26 @@ REMEMBER: Use tools when they are relevant to the task.`;
       // 🔥 Format quoted message if present - prepend to text content
       if (msg.quotedMessage) {
         const quotedRole = msg.quotedMessage.role.toUpperCase();
-        const quotedText = msg.quotedMessage.content.length > 100 ? msg.quotedMessage.content.substring(0, 100) + '...' : msg.quotedMessage.content;
+        const quotedFullText = getTextContent(msg.quotedMessage.content); // 🔥 Handle string | ContentPart[]
+        const quotedText = quotedFullText.length > 100 ? quotedFullText.substring(0, 100) + '...' : quotedFullText;
         const quotePrefix = `[QUOTED MESSAGE]\nRole: ${quotedRole}\nContent: "${quotedText}"\n---\n\n`;
 
+        // 🔥 NEW: Include media from quoted message if present
+        const quotedMediaParts = hasMedia(msg.quotedMessage.content) ? extractMediaParts(msg.quotedMessage.content) : [];
+
         if (typeof content === 'string') {
-          content = quotePrefix + content;
+          if (quotedMediaParts.length > 0) {
+            content = [{ type: 'text', text: quotePrefix + content }, ...quotedMediaParts];
+          } else {
+            content = quotePrefix + content;
+          }
         } else if (Array.isArray(content)) {
-          // For multimodal content, prepend quote as text part
-          content = [{ type: 'text', text: quotePrefix + getTextContent(content) }, ...content.filter((p) => p.type !== 'text')];
+          // For multimodal content, prepend quote as text part and include quoted media
+          content = [
+            { type: 'text', text: quotePrefix + getTextContent(content) } as ContentPart,
+            ...quotedMediaParts,
+            ...content.filter((p) => p.type !== 'text'),
+          ];
         }
       }
 

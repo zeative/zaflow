@@ -11,4 +11,5 @@ tsup.config.ts
 
 example/test*
 media
+vendor
 .examples

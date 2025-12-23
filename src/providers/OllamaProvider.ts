@@ -6,6 +6,7 @@ import { BaseProvider } from '../core/Provider';
 import { ResponseFormatter } from '../protocol/ResponseFormatter';
 import { ToolCallParser } from '../protocol/ToolCallParser';
 import { LazyLoader } from '../utils/LazyLoader';
+import { getTextContent } from '../types/content';
 
 /**
  * Ollama provider implementation
@@ -30,8 +31,8 @@ export class OllamaProvider extends BaseProvider implements Provider {
   async chat(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): Promise<ProviderResponse> {
     // Convert to Ollama format
     const ollamaMessages = messages.map((msg) => ({
-      role: msg.role === 'tool' ? 'assistant' : msg.role, // Ollama doesn't have tool role
-      content: msg.role === 'tool' ? `Tool result: ${msg.content}` : msg.content,
+      role: (msg.role === 'tool' ? 'assistant' : msg.role) as any, // Ollama doesn't have tool role
+      content: msg.role === 'tool' ? `Tool result: ${getTextContent(msg.content)}` : getTextContent(msg.content),
     }));
 
     const response = await this.client.chat({
@@ -69,8 +70,8 @@ export class OllamaProvider extends BaseProvider implements Provider {
 
   async *stream(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): AsyncIterableIterator<string> {
     const ollamaMessages = messages.map((msg) => ({
-      role: msg.role === 'tool' ? 'assistant' : msg.role,
-      content: msg.role === 'tool' ? `Tool result: ${msg.content}` : msg.content,
+      role: (msg.role === 'tool' ? 'assistant' : msg.role) as any,
+      content: msg.role === 'tool' ? `Tool result: ${getTextContent(msg.content)}` : getTextContent(msg.content),
     }));
 
     const stream = await this.client.chat({

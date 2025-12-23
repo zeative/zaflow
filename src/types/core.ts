@@ -18,7 +18,7 @@ export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 export interface QuotedMessage {
   id?: string;
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: string | ContentPart[]; // 🔥 Multimodal support - AI can read media from replied message
   timestamp?: number;
   config?: import('../types/quote').QuoteConfig; // 🔥 Store config for runtime processing
 }

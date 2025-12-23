@@ -6,6 +6,7 @@ import { BaseProvider } from '../core/Provider';
 import { ResponseFormatter } from '../protocol/ResponseFormatter';
 import { ToolCallParser } from '../protocol/ToolCallParser';
 import { LazyLoader } from '../utils/LazyLoader';
+import { getTextContent } from '../types/content';
 
 /**
  * Groq provider with dual protocol support
@@ -44,7 +45,7 @@ export class GroqProvider extends BaseProvider implements Provider {
     // Convert messages to Groq format
     let groqMessages = messages.map((msg) => ({
       role: msg.role === 'tool' ? ('tool' as const) : msg.role,
-      content: msg.content,
+      content: msg.role === 'system' || msg.role === 'tool' ? getTextContent(msg.content) : msg.content,
       ...(msg.name && { name: msg.name }),
       ...(msg.toolCallId && { tool_call_id: msg.toolCallId }),
       ...(msg.toolCalls && {
@@ -147,7 +148,7 @@ export class GroqProvider extends BaseProvider implements Provider {
     // Convert messages
     const groqMessages = messages.map((msg) => ({
       role: msg.role === 'tool' ? ('tool' as const) : msg.role,
-      content: msg.content,
+      content: msg.role === 'system' || msg.role === 'tool' ? getTextContent(msg.content) : msg.content,
       ...(msg.name && { name: msg.name }),
       ...(msg.toolCallId && { tool_call_id: msg.toolCallId }),
     }));
@@ -164,7 +165,7 @@ export class GroqProvider extends BaseProvider implements Provider {
         }),
     };
 
-    const stream = await this.client.chat.completions.create(options);
+    const stream = (await this.client.chat.completions.create(options as any)) as any;
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;

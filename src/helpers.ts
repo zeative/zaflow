@@ -118,27 +118,22 @@ export const msg = {
   },
   /**
    * 🔥 Reply to a previous message (semantic processing happens automatically at runtime)
+   * Media from replied message will also be processed by AI!
    * @param quotedMsg - The message being replied to
-   * @param content - The reply content
+   * @param content - The reply content (string, ContentPart[], or another Message object)
    * @param config - Quote configuration (optional)
    */
-  reply(quotedMsg: Message, content: string | ContentPart[], config?: QuoteConfig): Message {
-    const quotedContent =
-      typeof quotedMsg.content === 'string'
-        ? quotedMsg.content
-        : Array.isArray(quotedMsg.content)
-        ? quotedMsg.content
-            .filter((p) => p.type === 'text')
-            .map((p) => (p as any).text || '')
-            .join(' ')
-        : '';
+  reply(quotedMsg: Message, content: string | ContentPart[] | Message, config?: QuoteConfig): Message {
+    // 🔥 Extract content if a Message object is provided
+    const actualContent = (content as any).role ? (content as Message).content : (content as string | ContentPart[]);
 
+    // 🔥 Now preserves entire content including media, not just text!
     return {
       role: 'user',
-      content,
+      content: actualContent,
       quotedMessage: {
         role: quotedMsg.role as 'user' | 'assistant' | 'system',
-        content: quotedContent,
+        content: quotedMsg.content, // 🔥 Keep original content (string | ContentPart[])
         timestamp: Date.now(),
         config, // 🔥 Store config for runtime processing
       },
