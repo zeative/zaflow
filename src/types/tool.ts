@@ -66,6 +66,8 @@ export interface ToolDefinition<TSchema extends z.ZodSchema = any> {
   handles?: MediaType[];
   /** 🔥 Priority for conflict resolution (higher = preferred) */
   priority?: number;
+  /** 🔥 Execute in background (fire and forget) */
+  background?: boolean;
 }
 
 /**
@@ -80,6 +82,7 @@ export interface Tool<TSchema extends z.ZodSchema = any> {
   retry?: RetryConfig;
   handles?: MediaType[]; // 🔥 Multimodal support
   priority?: number; // 🔥 Tool priority
+  background?: boolean; // 🔥 Background execution
 
   /**
    * Execute tool with validation, caching, and retry support

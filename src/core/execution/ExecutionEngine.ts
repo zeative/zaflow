@@ -1,16 +1,15 @@
-import { Agent } from '../../types/agent';
-import { ContentPart, extractMediaParts, getTextContent, hasMedia } from '../../types/content';
-import { ExecutionMode, Message, ModelConfig, RunOptions, StreamOptions, TokenUsage, ZaFlowResponse } from '../../types/core';
-import { Hooks } from '../../types/hooks';
-import { Provider, ProviderMessage, ToolCall } from '../../types/provider';
-import { Tool } from '../../types/tool';
-import { generateExecutionId } from '../../utils/system/id';
-import { Intent } from '../../utils/intelligence/Intent';
-import { ToolIntelligence } from '../../utils/intelligence/ToolIntelligence';
-import { simulateStreaming } from '../../utils/system/streaming';
 import { AgentDelegationFormatter } from '../../protocol/AgentDelegation';
 import { ResponseFormatter } from '../../protocol/ResponseFormatter';
 import { ToolCallParser } from '../../protocol/ToolCallParser';
+import { Agent } from '../../types/agent';
+import { extractMediaParts, getTextContent, hasMedia } from '../../types/content';
+import { ExecutionMode, Message, ModelConfig, RunOptions, StreamOptions, TokenUsage, ZaFlowResponse } from '../../types/core';
+import { Hooks } from '../../types/hooks';
+import { Provider, ProviderMessage } from '../../types/provider';
+import { Tool } from '../../types/tool';
+import { Intent } from '../../utils/intelligence/Intent';
+import { generateExecutionId } from '../../utils/system/id';
+import { simulateStreaming } from '../../utils/system/streaming';
 import { HistoryManager } from '../state/History';
 import { ToolExecutor } from './ToolExecutor';
 
@@ -22,7 +21,7 @@ export class ExecutionEngine {
     private config: ModelConfig,
     private historyManager: HistoryManager,
     private toolExecutor: ToolExecutor,
-    private hooks?: Hooks
+    private hooks?: Hooks,
   ) {}
 
   async run(message: Message, mode: ExecutionMode, options?: RunOptions): Promise<ZaFlowResponse> {
@@ -70,7 +69,7 @@ export class ExecutionEngine {
         const messages = this.prepareMessages(options?.systemPrompt);
         const config = { ...this.config, ...options?.config, stream: true };
         const streamIter = this.provider.stream(messages, config, this.tools);
-        
+
         let fullText = '';
         for await (const chunk of streamIter) {
           fullText += chunk;
@@ -92,11 +91,11 @@ export class ExecutionEngine {
   private prepareMessages(systemPrompt?: string): ProviderMessage[] {
     const history = this.historyManager.getHistory() as ProviderMessage[];
     if (systemPrompt) {
-       if (history.length > 0 && history[0].role === 'system') {
-         return [{ ...history[0], content: systemPrompt }, ...history.slice(1)];
-       } else {
-         return [{ role: 'system', content: systemPrompt }, ...history];
-       }
+      if (history.length > 0 && history[0].role === 'system') {
+        return [{ ...history[0], content: systemPrompt }, ...history.slice(1)];
+      } else {
+        return [{ role: 'system', content: systemPrompt }, ...history];
+      }
     }
     return history;
   }
@@ -104,7 +103,7 @@ export class ExecutionEngine {
   private async runSingle(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
     const messages = this.prepareMessages(options?.systemPrompt);
     const config = { ...this.config, ...options?.config };
-    
+
     const response = await this.provider.chat(messages, config);
 
     return {
@@ -129,7 +128,7 @@ export class ExecutionEngine {
     const config = { ...this.config, ...options?.config };
     const toolsCalled: string[] = [];
     const totalUsage: TokenUsage = { prompt: 0, completion: 0, total: 0 };
-    
+
     let iterations = 0;
     const maxIterations = 10;
 
@@ -137,7 +136,7 @@ export class ExecutionEngine {
       const messages = this.historyManager.getHistory() as ProviderMessage[];
       const agent = options?.agentName ? this.agents.find((a) => a.name === options.agentName) : undefined;
       const provider = agent?.getProvider() || this.provider;
-      const tools = agent?.tools || (options?.agentName ? [] : this.tools); 
+      const tools = agent?.tools || (options?.agentName ? [] : this.tools);
       const modelConfig = agent?.config || config;
 
       const response = await provider.chat(messages, modelConfig, tools);
@@ -172,7 +171,7 @@ export class ExecutionEngine {
         };
       }
 
-      const toolResults = await this.toolExecutor.execute(toolCalls, 'main', generateExecutionId(), messages as Message[], 'agentic', tools);
+      const toolResults = await this.toolExecutor.executeBatch(toolCalls, 'main', { executionId: generateExecutionId(), mode: 'agentic' });
       toolsCalled.push(...toolCalls.map((tc) => tc.name));
 
       this.historyManager.addMessage({
@@ -182,12 +181,13 @@ export class ExecutionEngine {
       });
 
       for (const result of toolResults) {
-        const content = typeof result.result === 'string'
+        const content =
+          typeof result.result === 'string'
             ? result.result
             : result.result === undefined
-              ? 'Tool execution completed with no output.'
-              : JSON.stringify(result.result);
-        
+            ? 'Tool execution completed with no output.'
+            : JSON.stringify(result.result);
+
         this.historyManager.addMessage({
           role: 'tool',
           content,
@@ -220,23 +220,21 @@ export class ExecutionEngine {
 
     const messages = this.prepareMessages(options?.systemPrompt);
 
-    // 🔥 Inject agent delegation instructions if agents are available
     if (this.agents.length > 0) {
       const delegationInstructions = AgentDelegationFormatter.generateAgentInstructions(this.agents, this.tools);
-      
-      // Check if system message exists
+
       if (messages.length > 0 && messages[0].role === 'system') {
         messages[0].content = `${messages[0].content}\n\n${delegationInstructions}`;
       } else {
         messages.unshift({ role: 'system', content: delegationInstructions });
       }
     }
-    
+
     if (hasMedia(userMessage.content) && !this.provider.supportsVision) {
       const textOnly = getTextContent(userMessage.content);
       const mediaParts = extractMediaParts(userMessage.content);
       const hint = `\n\n[SYSTEM ALERT]: The user has provided ${mediaParts.length} media item(s) which you CANNOT see directly. Please DELEGATE the analysis to the appropriate agent using the <agent_call> format.`;
-      
+
       const lastMsg = messages[messages.length - 1];
       if (lastMsg.role === 'user') {
         lastMsg.content = textOnly + hint;
@@ -315,8 +313,33 @@ export class ExecutionEngine {
             totalUsage.total += agentResponse.usage.totalTokens;
           }
 
+          let subToolCalls = agentResponse.toolCalls;
+          if (!subToolCalls || subToolCalls.length === 0) {
+            if (ToolCallParser.hasToolCalls(agentResponse.content)) {
+              subToolCalls = ToolCallParser.parse(agentResponse.content);
+
+              // Sanitize content to remove hallucinations after tool calls
+              if (subToolCalls.length > 0) {
+                const xmlMatch = agentResponse.content.lastIndexOf('</tool_call>');
+                const tokenMatch = agentResponse.content.lastIndexOf('<|call|>');
+
+                if (xmlMatch !== -1) {
+                  agentResponse.content = agentResponse.content.substring(0, xmlMatch + 12);
+                } else if (tokenMatch !== -1) {
+                  agentResponse.content = agentResponse.content.substring(0, tokenMatch + 8);
+                }
+              }
+            }
+          }
+          subToolCalls = subToolCalls || [];
+
           if (subToolCalls.length > 0) {
-            const subToolResults = await this.toolExecutor.execute(subToolCalls, agent.name, generateExecutionId(), agentMessages as Message[], 'autonomous', agent.tools);
+            const subToolResults = await this.toolExecutor.executeBatch(
+              subToolCalls,
+              agent.name,
+              { executionId: generateExecutionId(), mode: 'autonomous' },
+              agent.tools,
+            );
             toolsCalled.push(...subToolCalls.map((tc) => tc.name));
 
             const finalMessages = [
@@ -332,7 +355,7 @@ export class ExecutionEngine {
             ];
 
             const finalResponse = await agentProvider.chat(finalMessages, agent.config || this.config, agent.tools);
-            
+
             if (finalResponse.usage) {
               totalUsage.prompt += finalResponse.usage.promptTokens;
               totalUsage.completion += finalResponse.usage.completionTokens;
@@ -353,21 +376,24 @@ export class ExecutionEngine {
       }
 
       if (toolCalls.length > 0) {
-        const toolResults = await this.toolExecutor.execute(toolCalls, '', generateExecutionId(), messages as Message[], 'autonomous', this.tools);
+        const toolResults = await this.toolExecutor.executeBatch(toolCalls, '', { executionId: generateExecutionId(), mode: 'autonomous' }, this.tools);
         for (const tr of toolResults) {
           directToolResults.push({ name: tr.name, result: tr.result });
           toolsCalled.push(tr.name);
         }
       }
 
-      const synthesisPrompt = `The agents have completed their tasks. Here are the results:\n\n${agentResults.map(r => `Agent ${r.agentName}: ${r.result}`).join('\n\n')}\n\n${directToolResults.map(r => `Tool ${r.name}: ${JSON.stringify(r.result)}`).join('\n\n')}\n\nBased on these results, provide a final answer to the user. Do NOT delegate again.`;
-      
+      const synthesisPrompt = `The agents have completed their tasks. Here are the results:\n\n${agentResults
+        .map((r) => `Agent ${r.agentName}: ${r.result}`)
+        .join('\n\n')}\n\n${directToolResults
+        .map((r) => `Tool ${r.name}: ${JSON.stringify(r.result)}`)
+        .join('\n\n')}\n\nBased on these results, provide a final answer to the user. Do NOT delegate again.`;
+
       const synthesisMessages = [...messages, { role: 'user' as const, content: synthesisPrompt }];
-      
 
       const finalResponse = await this.provider.chat(synthesisMessages, this.config);
 
-       if (finalResponse.usage) {
+      if (finalResponse.usage) {
         totalUsage.prompt += finalResponse.usage.promptTokens;
         totalUsage.completion += finalResponse.usage.completionTokens;
         totalUsage.total += finalResponse.usage.totalTokens;

@@ -11,6 +11,17 @@ export { text, image, imageBase64, audio, file, msg } from './helpers';
 // Utils functions
 export * from './utils';
 
+// Core Architecture Exports
+export * from './core/parsing/ToolParser';
+export * from './core/parsing/StructuredParser';
+export * from './core/parsing/XmlParser';
+export * from './core/parsing/RegexParser';
+export * from './core/prompt/PromptCompiler';
+export * from './core/prompt/AdaptivePrompt';
+export * from './core/execution/ToolExecutor';
+export * from './core/execution/DependencyGraph';
+export * from './core/cache/SmartCache';
+
 // Type exports
 export type {
   // Core types
