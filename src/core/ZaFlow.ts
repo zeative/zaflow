@@ -417,7 +417,12 @@ export default class ZaFlow<TContext = any> {
       });
 
       for (const result of toolResults) {
-        const content = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
+        const content =
+          typeof result.result === 'string'
+            ? result.result
+            : result.result === undefined
+              ? 'Tool execution completed with no output.'
+              : JSON.stringify(result.result);
         currentMessages.push({
           role: 'tool',
           content,
@@ -834,6 +839,7 @@ REMEMBER: Use tools when they are relevant to the task.`;
 [SYSTEM GROUNDING]: Below are the RAW tool results that were executed. You MUST use this data for your final answer. Do NOT hallucinate information not present in these results.
 
 ${agentResults.map(ar => `--- AGENT: ${ar.agentName} ---\n${ar.result}`).join('\n\n')}
+${directToolResults.map((tr) => `--- TOOL: ${tr.name} ---\n${typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)}`).join('\n\n')}
 
 Please synthesize these results into a comprehensive final answer for the user.`,
         },

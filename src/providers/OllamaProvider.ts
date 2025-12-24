@@ -31,7 +31,7 @@ export class OllamaProvider extends BaseProvider implements Provider {
   async chat(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): Promise<ProviderResponse> {
     // Convert to Ollama format
     const ollamaMessages = messages.map((msg) => ({
-      role: (msg.role === 'tool' ? 'assistant' : msg.role) as any, // Ollama doesn't have tool role
+      role: (msg.role === 'tool' ? 'user' : msg.role) as any, // Map tool results to user role for better grounding
       content: msg.role === 'tool' ? `Tool result: ${getTextContent(msg.content)}` : getTextContent(msg.content),
     }));
 
@@ -70,7 +70,7 @@ export class OllamaProvider extends BaseProvider implements Provider {
 
   async *stream(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): AsyncIterableIterator<string> {
     const ollamaMessages = messages.map((msg) => ({
-      role: (msg.role === 'tool' ? 'assistant' : msg.role) as any,
+      role: (msg.role === 'tool' ? 'user' : msg.role) as any,
       content: msg.role === 'tool' ? `Tool result: ${getTextContent(msg.content)}` : getTextContent(msg.content),
     }));
 
