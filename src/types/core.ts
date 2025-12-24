@@ -31,6 +31,7 @@ export interface Message {
   content: string | ContentPart[]; // 🔥 Multimodal support
   name?: string; // For tool messages
   toolCallId?: string; // For tool responses
+  toolCalls?: import('./provider').ToolCall[]; // For assistant messages
   quotedMessage?: QuotedMessage; // 🔥 Reply/Quote support
 }
 

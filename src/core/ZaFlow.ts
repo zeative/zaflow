@@ -1,27 +1,21 @@
 import { MemoryStorage } from '../plugins/storage/MemoryStorage';
-import { AgentDelegationFormatter } from '../protocol/AgentDelegation';
-import { ResponseFormatter } from '../protocol/ResponseFormatter';
-import { ToolCallParser } from '../protocol/ToolCallParser';
-import type { Agent } from '../types/agent';
-import type { ContentPart } from '../types/content';
-import { extractMediaParts, getTextContent, hasMedia } from '../types/content';
-import type { ExecutionMode, Message, ModelConfig, RunOptions, StreamOptions, TokenUsage, ZaFlowOptions, ZaFlowResponse } from '../types/core';
-import type { Hooks } from '../types/hooks';
-import type { Provider, ProviderMessage, ToolCall } from '../types/provider';
-import type { StoragePlugin } from '../types/storage';
-import type { Tool, ToolContext } from '../types/tool';
-import { generateExecutionId } from '../utils/id';
-import { Intent } from '../utils/Intent';
-import { semanticSearch } from '../utils/SemanticSearch';
-import { simulateStreaming } from '../utils/streaming';
-import { ContextManager } from './Context';
-import { HistoryManager } from './History';
-import { MediaProcessor } from './MediaProcessor';
-import { SharedMemoryPool } from './Memory';
+import { Agent } from '../types/agent';
+import { ContentPart, extractMediaParts, getTextContent, hasMedia } from '../types/content';
+import { ExecutionMode, Message, ModelConfig, RunOptions, StreamOptions, ZaFlowOptions, ZaFlowResponse } from '../types/core';
+import { Hooks } from '../types/hooks';
+import { Provider } from '../types/provider';
+import { StoragePlugin } from '../types/storage';
+import { Tool, ToolContext } from '../types/tool';
+import { generateExecutionId } from '../utils/system/id';
+import { semanticSearch } from '../utils/intelligence/SemanticSearch';
+import { ContextManager } from './state/Context';
+import { ExecutionEngine } from './execution/ExecutionEngine';
+import { HistoryManager } from './state/History';
+import { MediaProcessor } from './execution/MediaProcessor';
+import { SharedMemoryPool } from './state/Memory';
+import { PromptManager } from './prompt/PromptManager';
+import { ToolExecutor } from './execution/ToolExecutor';
 
-/**
- * Main ZaFlow class for orchestrating AI workflows
- */
 export default class ZaFlow<TContext = any> {
   private mode: ExecutionMode;
   private provider: Provider;
@@ -33,9 +27,10 @@ export default class ZaFlow<TContext = any> {
   private storage: StoragePlugin;
   private hooks?: Hooks;
   private historyManager: HistoryManager;
-  private systemPrompt?: string;
-  private prompts: Array<{ prompt: string; context?: any }> = [];
-  private mediaProcessor: MediaProcessor; // 🔥 Genius Media Processor
+  private promptManager: PromptManager;
+  private mediaProcessor: MediaProcessor;
+  private toolExecutor: ToolExecutor<TContext>;
+  private executionEngine: ExecutionEngine;
 
   constructor(options: ZaFlowOptions<TContext>) {
     this.mode = options.mode;
@@ -44,13 +39,31 @@ export default class ZaFlow<TContext = any> {
     this.tools = options.tools || [];
     this.config = options.config || {};
     this.hooks = options.hooks;
-    this.systemPrompt = options.systemPrompt;
+    this.storage = options.storage || new MemoryStorage();
 
     this.contextManager = new ContextManager<TContext>(this.hooks);
     this.sharedMemory = new SharedMemoryPool(this.hooks);
-    this.storage = options.storage || new MemoryStorage();
     this.historyManager = new HistoryManager(options.historyConfig);
-    this.mediaProcessor = new MediaProcessor(this.tools); // 🔥 Initialize processor
+    this.promptManager = new PromptManager(options.systemPrompt);
+    this.mediaProcessor = new MediaProcessor(this.tools);
+    
+    this.toolExecutor = new ToolExecutor(
+      this.tools,
+      this.contextManager,
+      this.sharedMemory,
+      this.storage,
+      this.hooks
+    );
+
+    this.executionEngine = new ExecutionEngine(
+      this.provider,
+      this.agents,
+      this.tools,
+      this.config,
+      this.historyManager,
+      this.toolExecutor,
+      this.hooks
+    );
   }
 
   addContext(context: Partial<TContext>): void {
@@ -77,42 +90,12 @@ export default class ZaFlow<TContext = any> {
     this.historyManager.clear();
   }
 
-  /**
-   * Get the model from provider's defaultModel
-   */
   getModel(): string {
     return this.provider.defaultModel;
   }
 
-  /**
-   * Add custom prompt with optional context
-   * This allows adding additional prompts that can use context data
-   */
   addPrompt(prompt: string, context?: any): void {
-    this.prompts.push({ prompt, context });
-  }
-
-  /**
-   * Get compiled prompts with context interpolation
-   */
-  private getCompiledPrompts(): string {
-    if (this.prompts.length === 0) {
-      return '';
-    }
-
-    return this.prompts
-      .map(({ prompt, context }) => {
-        if (!context) {
-          return prompt;
-        }
-
-        // Simple context replacement: {key} -> value
-        return prompt.replace(/\{([^}]+)\}/g, (match, key) => {
-          const value = context[key];
-          return value !== undefined ? String(value) : match;
-        });
-      })
-      .join('\n\n');
+    this.promptManager.addPrompt(prompt, context);
   }
 
   async run(message: string | Message | ContentPart[], options?: RunOptions): Promise<ZaFlowResponse> {
@@ -120,7 +103,6 @@ export default class ZaFlow<TContext = any> {
     const executionId = generateExecutionId();
 
     try {
-      // 🔥 GENIUS MULTIMODAL SUPPORT
       let userMessage: Message;
 
       if (typeof message === 'string') {
@@ -134,11 +116,8 @@ export default class ZaFlow<TContext = any> {
       this.hooks?.onStart?.(getTextContent(userMessage.content));
       this.historyManager.addMessage(userMessage);
 
-      // 🔥 AUTO-DETECT AND PROCESS MEDIA
       if (hasMedia(userMessage.content)) {
         const mediaParts = extractMediaParts(userMessage.content);
-        console.log(`[ZaFlow] 🎯 Auto-detected ${mediaParts.length} media item(s)`);
-
         const toolContext: ToolContext<TContext> = {
           userContext: this.getContext(),
           sharedMemory: this.sharedMemory,
@@ -151,24 +130,18 @@ export default class ZaFlow<TContext = any> {
         const { summary } = await this.mediaProcessor.process(mediaParts, toolContext);
 
         if (summary) {
-          // Inject analysis results into history
           this.historyManager.addMessage({ role: 'system', content: summary });
-          console.log('[ZaFlow] ✅ Media processing complete, results injected into context');
         }
       }
 
-      // 🔥 AUTO-PROCESS QUOTED MESSAGES (Media + Semantic Search)
       if (userMessage.quotedMessage) {
         const { content: quotedContent } = userMessage.quotedMessage;
         const config = userMessage.quotedMessage.config || { strategy: 'semantic' };
         const replyText = getTextContent(userMessage.content);
         const strategy = config.strategy || 'semantic';
 
-        // 🔥 NEW: Process media from quoted message!
         if (hasMedia(quotedContent)) {
           const quotedMediaParts = extractMediaParts(quotedContent);
-          console.log(`[ZaFlow] 🎯 Auto-detected ${quotedMediaParts.length} media item(s) from quoted message`);
-
           const toolContext: ToolContext<TContext> = {
             userContext: this.getContext(),
             sharedMemory: this.sharedMemory,
@@ -181,37 +154,28 @@ export default class ZaFlow<TContext = any> {
           const { summary } = await this.mediaProcessor.process(quotedMediaParts, toolContext);
 
           if (summary) {
-            // Inject quoted media analysis results into history
             this.historyManager.addMessage({ role: 'system', content: `[QUOTED MESSAGE MEDIA]\n${summary}` });
-            console.log('[ZaFlow] ✅ Quoted message media processing complete, results injected into context');
           }
         }
 
-        // Handle text content from quoted message (semantic search)
         const quotedTextContent = getTextContent(quotedContent);
         if (strategy === 'semantic' && quotedTextContent.length > 300) {
           try {
-            console.log('[ZaFlow] 🧠 Starting semantic search for quoted message...');
             await semanticSearch.initialize();
-
             const processedQuote = await semanticSearch.findRelevantContext(quotedTextContent, replyText, {
               maxChunks: config.semanticOptions?.maxChunks || 3,
               minSimilarity: config.semanticOptions?.minSimilarity || 0.3,
               maxChunkLength: config.semanticOptions?.maxChunkLength || 200,
             });
 
-            console.log(`[ZaFlow] 🧠 Semantic extraction: ${quotedTextContent.length} → ${processedQuote.length} chars`);
-            // Update quoted message content with processed text (keep media parts intact)
             if (typeof quotedContent === 'string') {
               userMessage.quotedMessage.content = processedQuote;
             } else {
-              // For ContentPart[], update text parts only
               userMessage.quotedMessage.content = quotedContent.map((part) =>
                 part.type === 'text' ? { type: 'text', text: processedQuote } as ContentPart : part,
               );
             }
           } catch (error) {
-            console.warn('[ZaFlow] Semantic search failed, falling back to truncate:', error);
             if (typeof quotedContent === 'string') {
               userMessage.quotedMessage.content = quotedTextContent.substring(0, config.maxLength || 300) + '...';
             }
@@ -223,30 +187,12 @@ export default class ZaFlow<TContext = any> {
         }
       }
 
-      console.log('🔍 ~ run ~ src/core/ZaFlow.ts:184 ~ userMessage:', userMessage);
+      const systemPrompt = this.promptManager.getSystemPrompt(options?.systemPrompt);
+      const runOptions = { ...options, systemPrompt };
 
-      const textMessage = getTextContent(userMessage.content);
-      let response: ZaFlowResponse;
-
-      switch (this.mode) {
-        case 'single':
-          response = await this.runSingle(textMessage, options);
-          break;
-        case 'agentic':
-          response = await this.runAgentic(textMessage, options);
-          break;
-        case 'autonomous':
-          response = await this.runAutonomous(userMessage, options);
-          break;
-        default:
-          throw new Error(`Unknown mode: ${this.mode}`);
-      }
+      const response = await this.executionEngine.run(userMessage, this.mode, runOptions);
 
       this.historyManager.addMessage({ role: 'assistant', content: response.content });
-
-      if (response.metadata) {
-        response.metadata.executionTime = Date.now() - startTime;
-      }
 
       this.hooks?.onComplete?.(response);
 
@@ -272,782 +218,30 @@ export default class ZaFlow<TContext = any> {
   }
 
   async *stream(message: string | Message | ContentPart[], options?: StreamOptions): AsyncIterableIterator<string> {
-    const textMessage = typeof message === 'string' ? message : getTextContent(Array.isArray(message) ? message : message.content);
-    this.hooks?.onStart?.(textMessage);
-    this.historyManager.addMessage({ role: 'user', content: typeof message === 'string' ? message : Array.isArray(message) ? message : message.content });
+    let userMessage: Message;
 
-    // Complex modes (AGENTIC, AUTONOMOUS) need full execution before streaming
-    // because tool calling and agent delegation can't be truly streamed
-    if (this.mode === 'agentic' || this.mode === 'autonomous') {
-      console.log(`[STREAM] ${this.mode.toUpperCase()} mode - executing fully then streaming result...`);
-
-      // Execute fully with all tools/agents - ALWAYS get detailed metadata
-      const response = await this.run(message, {
-        persistContext: options?.persistContext,
-        detailed: true, // Always generate metadata for hooks
-        systemPrompt: options?.systemPrompt, // Pass systemPrompt for override
-      });
-
-      // Simulate streaming of the complete result
-      for await (const chunk of simulateStreaming(response.content)) {
-        this.hooks?.onStreamChunk?.(chunk);
-        yield chunk;
-      }
-
-      this.hooks?.onStreamComplete?.(response.content);
-      // Note: history already updated by run()
+    if (typeof message === 'string') {
+      userMessage = { role: 'user', content: message };
+    } else if (Array.isArray(message)) {
+      userMessage = { role: 'user', content: message };
     } else {
-      // SINGLE mode can use true provider streaming
-      if (this.provider.stream) {
-        const messages = this.prepareMessages(options?.systemPrompt);
-        const config = { ...this.config, ...options?.config, stream: true };
+      userMessage = message;
+    }
 
-        const streamIter = this.provider.stream(messages, config, this.tools);
-        let fullText = '';
+    this.hooks?.onStart?.(getTextContent(userMessage.content));
+    this.historyManager.addMessage(userMessage);
 
-        for await (const chunk of streamIter) {
-          fullText += chunk;
-          this.hooks?.onStreamChunk?.(chunk);
-          yield chunk;
-        }
+    const systemPrompt = this.promptManager.getSystemPrompt(options?.systemPrompt);
+    const streamOptions = { ...options, systemPrompt };
 
-        this.hooks?.onStreamComplete?.(fullText);
-        this.historyManager.addMessage({ role: 'assistant', content: fullText });
-      } else {
-        const response = await this.run(message, { persistContext: options?.persistContext, systemPrompt: options?.systemPrompt });
+    const streamIter = this.executionEngine.stream(userMessage, this.mode, streamOptions);
 
-        for await (const chunk of simulateStreaming(response.content)) {
-          this.hooks?.onStreamChunk?.(chunk);
-          yield chunk;
-        }
-
-        this.hooks?.onStreamComplete?.(response.content);
-      }
+    for await (const chunk of streamIter) {
+      yield chunk;
     }
 
     if (!options?.persistContext) {
       this.clearContext();
-    }
-  }
-
-  private async runSingle(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
-    const messages = this.prepareMessages(options?.systemPrompt, this.tools, this.provider);
-    const config = { ...this.config, ...options?.config };
-
-    const response = await this.provider.chat(messages, config);
-
-    return {
-      content: response.content,
-      metadata: options?.detailed
-        ? {
-            tokensUsed: {
-              prompt: response.usage?.promptTokens || 0,
-              completion: response.usage?.completionTokens || 0,
-              total: response.usage?.totalTokens || 0,
-            },
-            toolsCalled: [],
-            agentsCalled: [],
-            executionTime: 0,
-            model: this.getModel(),
-          }
-        : undefined,
-    };
-  }
-
-  private async runAgentic(message: string, options?: RunOptions): Promise<ZaFlowResponse> {
-    const messages = this.prepareMessages(options?.systemPrompt, this.tools, this.provider);
-    const config = { ...this.config, ...options?.config };
-    const toolsCalled: string[] = [];
-    let totalUsage: TokenUsage = { prompt: 0, completion: 0, total: 0 };
-
-    let currentMessages = messages;
-    let iterations = 0;
-    const maxIterations = 10;
-
-    while (iterations < maxIterations) {
-      const agent = options?.agentName ? this.agents.find((a) => a.name === options.agentName) : undefined;
-      const provider = agent?.getProvider() || this.provider;
-      const tools = agent?.tools || this.tools;
-      const modelConfig = agent?.config || config;
-
-      const response = await provider.chat(currentMessages, modelConfig, tools);
-
-      // Normalize content
-      response.content = response.content || '';
-
-      if (response.usage) {
-        totalUsage.prompt += response.usage.promptTokens;
-        totalUsage.completion += response.usage.completionTokens;
-        totalUsage.total += response.usage.totalTokens;
-      }
-
-      let toolCalls = response.toolCalls;
-
-      if (!toolCalls || toolCalls.length === 0) {
-        if (ToolCallParser.hasToolCalls(response.content)) {
-          toolCalls = ToolCallParser.parse(response.content);
-          console.log('[AGENTIC] ✅ Parsed', toolCalls.length, 'tool calls from XML');
-        }
-      } else {
-        console.log('[AGENTIC] 🎯 Native tool calls:', toolCalls.length);
-      }
-
-      if (!toolCalls || toolCalls.length === 0) {
-        return {
-          content: response.content,
-          metadata: options?.detailed
-            ? {
-                tokensUsed: totalUsage,
-                toolsCalled,
-                agentsCalled: [],
-                executionTime: 0,
-                model: this.getModel(),
-              }
-            : undefined,
-        };
-      }
-
-      const toolResults = await this.executeToolCalls(toolCalls, 'main', generateExecutionId());
-      toolsCalled.push(...toolCalls.map((tc) => tc.name));
-
-      currentMessages.push({
-        role: 'assistant',
-        content: response.content || 'Using tools...',
-        toolCalls: toolCalls,
-      });
-
-      for (const result of toolResults) {
-        const content =
-          typeof result.result === 'string'
-            ? result.result
-            : result.result === undefined
-              ? 'Tool execution completed with no output.'
-              : JSON.stringify(result.result);
-        currentMessages.push({
-          role: 'tool',
-          content,
-          name: result.name,
-          toolCallId: result.id,
-        });
-      }
-
-      iterations++;
-    }
-
-    return {
-      content: 'Maximum tool calling iterations reached',
-      metadata: options?.detailed
-        ? {
-            tokensUsed: totalUsage,
-            toolsCalled,
-            agentsCalled: [],
-            executionTime: 0,
-            model: this.getModel(),
-          }
-        : undefined,
-    };
-  }
-
-  private async runAutonomous(userMessage: Message, options?: RunOptions): Promise<ZaFlowResponse> {
-    const agentsCalled: string[] = [];
-    const toolsCalled: string[] = [];
-    let totalUsage: TokenUsage = { prompt: 0, completion: 0, total: 0 };
-
-    const agentInstructions = AgentDelegationFormatter.generateAgentInstructions(this.agents, this.tools);
-
-    // Priority: runtime systemPrompt > class systemPrompt > default
-    let baseSystemPrompt = options?.systemPrompt || this.systemPrompt || this.getDefaultSystemPrompt();
-
-    // Append compiled prompts if any
-    const compiledPrompts = this.getCompiledPrompts();
-    if (compiledPrompts) {
-      baseSystemPrompt = `${baseSystemPrompt}\n\n${compiledPrompts}`;
-    }
-
-    // Merge base system prompt with agent instructions
-    const systemContent = `${baseSystemPrompt}\n\n---\n\n${agentInstructions}`;
-
-    // 🔥 Format content with quoted message (now supports media!)
-    // For vision models, we need to include the actual image data, not just text
-    let formattedContent: string | ContentPart[];
-
-    if (userMessage.quotedMessage) {
-      const { role, content: quotedContent } = userMessage.quotedMessage;
-      const quotedText = getTextContent(quotedContent);
-      const quotePrefix = `[QUOTED MESSAGE]\nRole: ${role.toUpperCase()}\nContent: "${quotedText}"\n---\n\n`;
-
-      // 🔥 Check if quoted message has media
-      const quotedMediaParts = hasMedia(quotedContent) ? extractMediaParts(quotedContent) : [];
-      const userMediaParts = hasMedia(userMessage.content) ? extractMediaParts(userMessage.content) : [];
-      const userTextContent = getTextContent(userMessage.content);
-
-      if (quotedMediaParts.length > 0 || userMediaParts.length > 0) {
-        // Build multimodal content: text prefix + media from both + user question
-        formattedContent = [
-          { type: 'text', text: quotePrefix + userTextContent } as ContentPart,
-          ...quotedMediaParts,
-          ...userMediaParts,
-        ];
-        console.log(
-          `[AUTONOMOUS] 🖼️ Including ${quotedMediaParts.length} media from quote and ${userMediaParts.length} media from current message`,
-        );
-      } else {
-        // No media in either, just use text
-        formattedContent = quotePrefix + userTextContent;
-      }
-    } else {
-      formattedContent = userMessage.content;
-    }
-
-    // Get history and prepare messages
-    const historyMessages = this.prepareMessages(baseSystemPrompt);
-
-    // Replace the last message (which is the current user message) with the formatted one if needed
-    // Actually, prepareMessages already handles the history.
-    // But runAutonomous was manually constructing messages.
-    // Let's use prepareMessages but override the system prompt.
-
-    const messages: ProviderMessage[] = historyMessages;
-
-    // Ensure the system message has the agent instructions
-    if (messages[0] && messages[0].role === 'system') {
-      messages[0].content = systemContent;
-    }
-
-    // 🔥 Replace last user message with properly formatted content (including media from quote)
-    const lastMessageIndex = messages.length - 1;
-    if (lastMessageIndex > 0 && messages[lastMessageIndex].role === 'user') {
-      let finalContent = formattedContent;
-
-      // 🔥 CAPABILITY-BASED ROUTING: Strip media if provider doesn't support vision
-      if (hasMedia(finalContent) && !this.provider.supportsVision) {
-        const textOnly = getTextContent(finalContent);
-        const mediaParts = extractMediaParts(finalContent);
-        
-        console.log(`[AUTONOMOUS] ⚠️ Provider "${this.provider.name}" does NOT support vision. Stripping ${mediaParts.length} media item(s).`);
-        
-        const hint = `\n\n[SYSTEM ALERT]: The user has provided ${mediaParts.length} media item(s) (images/files) which you CANNOT see directly because your current model configuration does not support vision. 
-        
-HOWEVER, you have specialized agents available that CAN see and analyze these items. 
-Please DELEGATE the analysis to the appropriate agent (e.g., "Image Agent") using the <agent_call> format if you need to understand the media content to answer the user.`;
-        finalContent = textOnly + hint;
-      }
-
-      messages[lastMessageIndex].content = finalContent;
-    }
-
-    const response = await this.provider.chat(messages, this.config);
-
-    // Normalize content
-    response.content = response.content || '';
-
-    if (response.usage) {
-      totalUsage.prompt += response.usage.promptTokens;
-      totalUsage.completion += response.usage.completionTokens;
-      totalUsage.total += response.usage.totalTokens;
-    }
-
-    console.log('[AUTONOMOUS] Main agent response length:', response.content.length);
-
-    let agentCalls = AgentDelegationFormatter.parseAgentCalls(response.content);
-    let toolCalls = ToolCallParser.parse(response.content);
-
-    const isConversational = Intent.isConversational(getTextContent(formattedContent));
-
-    if (agentCalls.length === 0 && toolCalls.length === 0 && this.agents.length > 0 && !isConversational) {
-      console.log('[AUTONOMOUS] ⚠️  No agent delegation detected, but agents are available. Enforcing delegation...');
-
-      // Add helpful reminder message
-      const enforcementMessage = {
-        role: 'user' as const,
-        content: `💡 HINT: You have specialized agents available that might be better suited for this task:
-${this.agents.map((a) => `- "${a.name}" (${a.role})`).join('\n')}
-
-If the user's request requires specialized processing, please use the <agent_call> XML format to delegate. Otherwise, if it's just general conversation, you can respond directly.`,
-      };
-
-      const retryMessages = [...messages, { role: 'assistant' as const, content: response.content }, enforcementMessage];
-
-      const retryResponse = await this.provider.chat(retryMessages, this.config);
-
-      if (retryResponse.usage) {
-        totalUsage.prompt += retryResponse.usage.promptTokens;
-        totalUsage.completion += retryResponse.usage.completionTokens;
-        totalUsage.total += retryResponse.usage.totalTokens;
-      }
-
-      // Parse again after enforcement
-      agentCalls = AgentDelegationFormatter.parseAgentCalls(retryResponse.content);
-      toolCalls = ToolCallParser.parse(retryResponse.content);
-
-      if (agentCalls.length > 0 || toolCalls.length > 0) {
-        console.log('[AUTONOMOUS] ✅ Enforcement successful! Delegation/Tool call now detected.');
-      } else {
-        console.log('[AUTONOMOUS] ⚠️  Model still refusing to delegate. Proceeding with direct response.');
-      }
-    }
-
-    if (agentCalls.length > 0 || toolCalls.length > 0) {
-      if (agentCalls.length > 0) {
-        console.log(
-          `[AUTONOMOUS] 🚀 Delegating to ${agentCalls.length} agent(s):`,
-          agentCalls.map((ac) => ac.name),
-        );
-      }
-
-      if (toolCalls.length > 0) {
-        console.log(`[AUTONOMOUS] 🔧 Executing ${toolCalls.length} direct tool call(s)`);
-      }
-
-      const agentResults: Array<{ agentName: string; result: string }> = [];
-      const directToolResults: Array<{ name: string; result: any }> = [];
-
-      for (const agentCall of agentCalls) {
-        const agent = this.agents.find((a) => a.name === agentCall.name);
-
-        if (!agent) {
-          console.log(`[AUTONOMOUS] ⚠️  Agent "${agentCall.name}" not found`);
-          agentResults.push({
-            agentName: agentCall.name,
-            result: `Error: Agent "${agentCall.name}" not found`,
-          });
-          continue;
-        }
-
-        agentsCalled.push(agent.name);
-        this.hooks?.onAgentStart?.(agent.name);
-
-        try {
-          // Build sub-agent system prompt with tool enforcement
-          let agentSystemPrompt = agent.getSystemPrompt();
-
-          // 🧠 TOOL GUIDELINES: Add tool calling instructions if agent has tools
-          if (agent.tools && agent.tools.length > 0) {
-            const agentProvider = agent.getProvider() || this.provider;
-
-            if (!agentProvider.supportsNativeTools) {
-              agentSystemPrompt += `\n\n${ResponseFormatter.generateToolInstructions(agent.tools, 'xml')}`;
-            } else {
-              const toolInstructions = `\n\n📋 TOOL USAGE PROTOCOL
-            
-You have ${agent.tools.length} specialized tool(s) available to help complete this task:
-
-${agent.tools.map((t) => `- **${t.name}**: ${t.description}`).join('\n')}
-
-⚠️ GUIDELINES:
-
-1. **TOOL USAGE**: When you need to perform an action that a tool can handle, you should use that tool.
-
-2. **DECISION PROCESS**:
-   - Check if ANY available tool matches what you need to do
-   - If YES → Use <tool_call> XML format (see below)
-   - If NO tools match → Respond directly
-
-3. **TOOL CALL FORMAT**:
-<tool_call>
-<name>exact_tool_name</name>
-<arguments>{"param1": "value1", "param2": "value2"}</arguments>
-</tool_call>
-
-REMEMBER: Use tools when they are relevant to the task.`;
-
-              agentSystemPrompt += toolInstructions;
-            }
-          }
-
-          // 🔥 SMART MEDIA ROUTING: Pass media to agent if it can handle it
-          const currentMediaParts = hasMedia(userMessage.content) ? extractMediaParts(userMessage.content) : [];
-          const quotedMediaParts = userMessage.quotedMessage && hasMedia(userMessage.quotedMessage.content) 
-            ? extractMediaParts(userMessage.quotedMessage.content) 
-            : [];
-          
-          const allMediaParts = [...quotedMediaParts, ...currentMediaParts];
-          let agentUserContent: string | ContentPart[] = agentCall.task;
-
-          if (allMediaParts.length > 0) {
-            const capableMediaParts = allMediaParts.filter(part => {
-              const mediaType = part.type === 'image_url' ? 'image' : (part.type as string);
-              return agent.canHandleMedia(mediaType);
-            });
-
-            if (capableMediaParts.length > 0) {
-              console.log(`[AUTONOMOUS] 🖼️ Routing ${capableMediaParts.length} media item(s) to capable agent: ${agent.name}`);
-              agentUserContent = [
-                { type: 'text', text: agentCall.task },
-                ...capableMediaParts
-              ];
-            }
-          }
-
-          const agentMessages: ProviderMessage[] = [
-            { role: 'system', content: agentSystemPrompt },
-            { role: 'user', content: agentUserContent },
-          ];
-
-          const agentProvider = agent.getProvider() || this.provider;
-
-          const agentResponse = await agentProvider.chat(agentMessages, agent.config || this.config, agent.tools);
-
-          if (agentResponse.usage) {
-            totalUsage.prompt += agentResponse.usage.promptTokens;
-            totalUsage.completion += agentResponse.usage.completionTokens;
-            totalUsage.total += agentResponse.usage.totalTokens;
-          }
-
-          // 🧠 GENIUS MULTI-LAYER TOOL INTELLIGENCE
-          // Use advanced cascade to extract tool calls no matter what
-          const { ToolIntelligence } = await import('../utils/ToolIntelligence');
-
-          let toolCalls = ToolIntelligence.extractToolCallsWithFallback(agentResponse.content, agentCall.task, agent.tools || [], agentResponse.toolCalls);
-
-          // If still no tool calls after intelligent extraction, try one more time with template
-          if (toolCalls.length === 0 && agent.tools && agent.tools.length > 0) {
-            console.log(`[AUTONOMOUS] ${agent.name} 🎯 Trying template-guided retry...`);
-
-            const template = ToolIntelligence.generateFillableTemplate(agent.tools, agentCall.task);
-            const templateMessage = {
-              role: 'user' as const,
-              content: `You MUST use the tool. Here's the exact template:${template}`,
-            };
-
-            const retryMessages = [...agentMessages, { role: 'assistant' as const, content: agentResponse.content }, templateMessage];
-            const retryResponse = await agentProvider.chat(retryMessages, agent.config || this.config, agent.tools);
-
-            if (retryResponse.usage) {
-              totalUsage.prompt += retryResponse.usage.promptTokens;
-              totalUsage.completion += retryResponse.usage.completionTokens;
-              totalUsage.total += retryResponse.usage.totalTokens;
-            }
-
-            // Try extraction again with retry response
-            toolCalls = ToolIntelligence.extractToolCallsWithFallback(retryResponse.content, agentCall.task, agent.tools || [], retryResponse.toolCalls);
-          }
-
-          if (toolCalls && toolCalls.length > 0) {
-            console.log(`[AUTONOMOUS] ${agent.name} 🔧 called ${toolCalls.length} tool(s)`);
-
-            const toolResults = await this.executeToolCalls(toolCalls, agent.name, generateExecutionId());
-
-            toolsCalled.push(...toolCalls.map((tc) => tc.name));
-
-            const finalMessages = [
-              ...agentMessages,
-              {
-                role: 'assistant' as const,
-                content: agentResponse.content || 'Using tools...',
-                toolCalls: toolCalls,
-              },
-              ...toolResults.map((tr) => ({
-                role: 'tool' as const,
-                content: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
-                name: tr.name,
-                toolCallId: tr.id,
-              })),
-              {
-                role: 'user' as const,
-                content: 'Based on the tool results above, provide a complete answer to the task.',
-              },
-            ];
-
-            const finalResponse = await agentProvider.chat(finalMessages, agent.config || this.config, agent.tools);
-
-            if (finalResponse.usage) {
-              totalUsage.prompt += finalResponse.usage.promptTokens;
-              totalUsage.completion += finalResponse.usage.completionTokens;
-              totalUsage.total += finalResponse.usage.totalTokens;
-            }
-
-            agentResults.push({
-              agentName: agent.name,
-              result: finalResponse.content,
-            });
-          } else {
-            agentResults.push({
-              agentName: agent.name,
-              result: agentResponse.content,
-            });
-          }
-
-          this.hooks?.onAgentComplete?.(agent.name, agentResponse.content);
-          console.log(`[AUTONOMOUS] ✅ ${agent.name} completed`);
-        } catch (error) {
-          const err = error as Error;
-          this.hooks?.onAgentError?.(agent.name, err);
-          console.log(`[AUTONOMOUS] ❌ ${agent.name} failed:`, err.message);
-
-          agentResults.push({
-            agentName: agent.name,
-            result: `Error: ${err.message}`,
-          });
-        }
-      }
-
-      // Execute direct tool calls if any
-      if (toolCalls.length > 0) {
-        const toolResults = await this.executeToolCalls(toolCalls, '', generateExecutionId());
-        for (const tr of toolResults) {
-          directToolResults.push({ name: tr.name, result: tr.result });
-          toolsCalled.push(tr.name);
-        }
-      }
-
-      console.log('[AUTONOMOUS] 🔄 Synthesizing results...');
-
-      // Priority: runtime systemPrompt > class systemPrompt > default
-      let synthesisBasePrompt = options?.systemPrompt || this.systemPrompt;
-
-      // Add synthesizer instruction
-      const synthesizerInstruction = 'You are the main orchestrator. Synthesize the results from specialized agents into a comprehensive final answer.';
-
-      if (synthesisBasePrompt) {
-        synthesisBasePrompt = `${synthesisBasePrompt}\n\n${synthesizerInstruction}`;
-      } else {
-        synthesisBasePrompt = synthesizerInstruction;
-      }
-
-      // Append compiled prompts if any
-      const compiledPrompts = this.getCompiledPrompts();
-      if (compiledPrompts) {
-        synthesisBasePrompt = `${synthesisBasePrompt}\n\n${compiledPrompts}`;
-      }
-
-      let synthesisUserContent = formattedContent;
-      if (hasMedia(synthesisUserContent) && !this.provider.supportsVision) {
-        synthesisUserContent = getTextContent(synthesisUserContent);
-      }
-
-      const synthesisMessages: ProviderMessage[] = [
-        {
-          role: 'system',
-          content: synthesisBasePrompt,
-        },
-        { role: 'user', content: synthesisUserContent },
-        {
-          role: 'assistant',
-          content: response.content,
-        },
-        {
-          role: 'user',
-          content: `Results to synthesize:\n\n${
-            agentResults.length > 0 ? `Agent results:\n${agentResults.map((ar) => `**${ar.agentName}:**\n${ar.result}`).join('\n\n')}\n\n` : ''
-      }${
-            directToolResults.length > 0
-              ? `Direct tool results:\n${directToolResults.map((tr) => `**${tr.name}:**\n${typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)}`).join('\n\n')}\n\n`
-              : ''
-          }
-          
-[SYSTEM GROUNDING]: Below are the RAW tool results that were executed. You MUST use this data for your final answer. Do NOT hallucinate information not present in these results.
-
-${agentResults.map(ar => `--- AGENT: ${ar.agentName} ---\n${ar.result}`).join('\n\n')}
-${directToolResults.map((tr) => `--- TOOL: ${tr.name} ---\n${typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)}`).join('\n\n')}
-
-Please synthesize these results into a comprehensive final answer for the user.`,
-        },
-      ];
-
-      const finalResponse = await this.provider.chat(synthesisMessages, this.config);
-
-      if (finalResponse.usage) {
-        totalUsage.prompt += finalResponse.usage.promptTokens;
-        totalUsage.completion += finalResponse.usage.completionTokens;
-        totalUsage.total += finalResponse.usage.totalTokens;
-      }
-
-      return {
-        content: finalResponse.content,
-        metadata: options?.detailed
-          ? {
-              tokensUsed: totalUsage,
-              toolsCalled,
-              agentsCalled,
-              executionTime: 0,
-              model: this.getModel(),
-            }
-          : undefined,
-      };
-    } else {
-      console.log('[AUTONOMOUS] ℹ️  No agent delegation detected, returning orchestrator response');
-
-      return {
-        content: response.content,
-        metadata: options?.detailed
-          ? {
-              tokensUsed: totalUsage,
-              toolsCalled,
-              agentsCalled,
-              executionTime: 0,
-              model: this.getModel(),
-            }
-          : undefined,
-      };
-    }
-  }
-
-  private async executeToolCalls(toolCalls: ToolCall[], agentName: string, executionId: string): Promise<Array<{ id: string; name: string; result: any }>> {
-    const results: Array<{ id: string; name: string; result: any }> = [];
-
-    for (const toolCall of toolCalls) {
-      // 🔍 SMART TOOL LOOKUP: Search in both main tools AND agent-specific tools
-      let tool = this.tools.find((t) => t.name === toolCall.name);
-
-      // If not found in main tools, search in the agent's tools
-      if (!tool && agentName) {
-        const agent = this.agents.find((a) => a.name === agentName);
-        if (agent && agent.tools) {
-          tool = agent.tools.find((t) => t.name === toolCall.name);
-          if (tool) {
-            console.log(`[TOOL EXECUTION] 🎯 Found tool "${toolCall.name}" in agent "${agentName}"`);
-          }
-        }
-      }
-
-      if (!tool) {
-        console.log(`[TOOL EXECUTION] ❌ Tool "${toolCall.name}" not found in main tools or agent tools`);
-        results.push({
-          id: toolCall.id,
-          name: toolCall.name,
-          result: { error: `Tool ${toolCall.name} not found` },
-        });
-        continue;
-      }
-
-      try {
-        console.log(`[TOOL EXECUTION] 🚀 Executing "${toolCall.name}"...`);
-        this.hooks?.onToolCall?.(toolCall.name, toolCall.arguments);
-
-        const context: ToolContext<TContext> = {
-          userContext: this.getContext(),
-          sharedMemory: this.sharedMemory,
-          agentName,
-          conversationHistory: this.getHistory(),
-          metadata: {
-            executionId,
-            timestamp: Date.now(),
-            mode: this.mode,
-          },
-          storage: this.storage,
-        };
-
-        const result = await tool.run(toolCall.arguments, context);
-        console.log(`[TOOL EXECUTION] ✅ Tool "${toolCall.name}" completed successfully.`);
-
-        this.hooks?.onToolComplete?.(toolCall.name, result);
-
-        results.push({
-          id: toolCall.id,
-          name: toolCall.name,
-          result,
-        });
-      } catch (error) {
-        const err = error as Error;
-        this.hooks?.onToolError?.(toolCall.name, err);
-        console.error(`[TOOL EXECUTION] ❌ Tool "${toolCall.name}" failed:`, err.message);
-
-        results.push({
-          id: toolCall.id,
-          name: toolCall.name,
-          result: { error: err.message },
-        });
-      }
-    }
-
-    return results;
-  }
-
-  private prepareMessages(runtimeSystemPrompt?: string, tools?: Tool[], provider?: Provider): ProviderMessage[] {
-    const messages: ProviderMessage[] = [];
-    const targetProvider = provider || this.provider;
-    const targetTools = tools || this.tools;
-
-    // Priority: runtime systemPrompt > class systemPrompt > default
-    let baseSystemPrompt = runtimeSystemPrompt || this.systemPrompt || this.getDefaultSystemPrompt();
-
-    // 🔥 AUTO-INJECT TOOL INSTRUCTIONS FOR NON-NATIVE PROVIDERS
-    if (targetTools.length > 0 && !targetProvider.supportsNativeTools) {
-      const toolInstructions = ResponseFormatter.generateToolInstructions(targetTools, 'xml');
-      baseSystemPrompt = `${baseSystemPrompt}\n\n${toolInstructions}`;
-    }
-
-    // Append compiled prompts if any
-    const compiledPrompts = this.getCompiledPrompts();
-    if (compiledPrompts) {
-      baseSystemPrompt = `${baseSystemPrompt}\n\n${compiledPrompts}`;
-    }
-
-    messages.push({ role: 'system', content: baseSystemPrompt });
-
-    const history = this.historyManager.getHistory();
-
-    for (const msg of history) {
-      // 🔥 PRESERVE MULTIMODAL CONTENT - pass as-is for vision/audio models
-      let content: string | ContentPart[] = msg.content;
-
-      // 🔥 Format quoted message if present - prepend to text content
-      if (msg.quotedMessage) {
-        const quotedRole = msg.quotedMessage.role.toUpperCase();
-        const quotedFullText = getTextContent(msg.quotedMessage.content); // 🔥 Handle string | ContentPart[]
-        const quotedText = quotedFullText.length > 100 ? quotedFullText.substring(0, 100) + '...' : quotedFullText;
-        const quotePrefix = `[QUOTED MESSAGE]\nRole: ${quotedRole}\nContent: "${quotedText}"\n---\n\n`;
-
-        // 🔥 NEW: Include media from quoted message if present
-        const quotedMediaParts = hasMedia(msg.quotedMessage.content) ? extractMediaParts(msg.quotedMessage.content) : [];
-
-        if (typeof content === 'string') {
-          if (quotedMediaParts.length > 0) {
-            content = [{ type: 'text', text: quotePrefix + content }, ...quotedMediaParts];
-          } else {
-            content = quotePrefix + content;
-          }
-        } else if (Array.isArray(content)) {
-          // For multimodal content, prepend quote as text part and include quoted media
-          content = [
-            { type: 'text', text: quotePrefix + getTextContent(content) } as ContentPart,
-            ...quotedMediaParts,
-            ...content.filter((p) => p.type !== 'text'),
-          ];
-        }
-      }
-
-      // 🔥 CAPABILITY-BASED ROUTING: Strip media if provider doesn't support vision
-      if (hasMedia(content) && !targetProvider.supportsVision) {
-        const textOnly = getTextContent(content);
-        const mediaParts = extractMediaParts(content);
-        
-        console.log(`[PREPARE] ⚠️ Provider "${targetProvider.name}" does NOT support vision. Stripping ${mediaParts.length} media item(s).`);
-        
-        // Only add hint for the last user message in autonomous mode to avoid cluttering history
-        if (this.mode === 'autonomous' && msg === history[history.length - 1] && msg.role === 'user') {
-          const hint = `\n\n[SYSTEM ALERT]: The user has provided ${mediaParts.length} media item(s) (images/files) which you CANNOT see directly because your current model configuration does not support vision. 
-          
-HOWEVER, you have specialized agents available that CAN see and analyze these items. 
-Please DELEGATE the analysis to the appropriate agent (e.g., "Image Agent") using the <agent_call> format if you need to understand the media content to answer the user.`;
-          content = textOnly + hint;
-        } else {
-          content = textOnly;
-        }
-      }
-
-      messages.push({
-        role: msg.role,
-        content,
-        name: msg.name,
-        toolCallId: msg.toolCallId,
-      });
-    }
-
-    return messages;
-  }
-
-  private getDefaultSystemPrompt(): string {
-    switch (this.mode) {
-      case 'single':
-        return 'You are a helpful AI assistant.';
-      case 'agentic':
-        return 'You are a helpful AI assistant with access to tools. Use tools when needed to help answer questions.';
-      case 'autonomous':
-        return 'You are an AI orchestrator managing multiple specialized agents. Coordinate agents effectively to complete tasks.';
-      default:
-        return 'You are a helpful AI assistant.';
     }
   }
 }

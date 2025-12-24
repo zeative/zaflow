@@ -1,15 +1,12 @@
 import type OpenAI from 'openai';
-import type { Provider, ProviderMessage, ProviderResponse } from '../types/provider';
-import type { ModelConfig } from '../types/core';
-import type { Tool } from '../types/tool';
-import { BaseProvider } from '../core/Provider';
+import { BaseProvider } from '../core/entities/Provider';
 import { ResponseFormatter } from '../protocol/ResponseFormatter';
-import { LazyLoader } from '../utils/LazyLoader';
 import { getTextContent } from '../types/content';
+import { ModelConfig } from '../types/core';
+import { Provider, ProviderMessage, ProviderResponse } from '../types/provider';
+import { Tool } from '../types/tool';
+import { LazyLoader } from '../utils/system/LazyLoader';
 
-/**
- * OpenAI provider implementation
- */
 export class OpenAIProvider extends BaseProvider implements Provider {
   name = 'openai';
   type = 'openai';
@@ -20,14 +17,12 @@ export class OpenAIProvider extends BaseProvider implements Provider {
   constructor(apiKey: string, defaultModel?: string) {
     super();
     const mod = LazyLoader.load<any>('openai', 'OpenAI');
-    // Handle both: module.default (ESM) and module itself (CJS)
     const OpenAIClass = mod.default || mod.OpenAI || mod;
     this.client = new OpenAIClass({ apiKey });
     this.defaultModel = defaultModel || 'gpt-4-turbo-preview';
   }
 
   async chat(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): Promise<ProviderResponse> {
-    // Convert messages to OpenAI format
     const openaiMessages = messages.map((msg) => ({
       role: msg.role,
       content: msg.role === 'system' || msg.role === 'tool' ? getTextContent(msg.content) : msg.content,
@@ -56,17 +51,14 @@ export class OpenAIProvider extends BaseProvider implements Provider {
       stop: config.stopSequences,
     };
 
-    // Add tools if provided
     if (tools && tools.length > 0) {
       options.tools = ResponseFormatter.formatToolsAsJSON(tools);
     }
 
     const completion = await this.client.chat.completions.create(options);
-
     const choice = completion.choices[0];
     const message = choice.message;
 
-    // Parse tool calls
     const toolCalls = message.tool_calls?.map((tc) => ({
       id: tc.id,
       name: tc.function.name,
@@ -88,7 +80,6 @@ export class OpenAIProvider extends BaseProvider implements Provider {
   }
 
   async *stream(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): AsyncIterableIterator<string> {
-    // Convert messages
     const openaiMessages = messages.map((msg) => ({
       role: msg.role,
       content: msg.role === 'system' || msg.role === 'tool' ? getTextContent(msg.content) : msg.content,

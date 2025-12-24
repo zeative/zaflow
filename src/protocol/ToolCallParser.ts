@@ -1,31 +1,21 @@
 import type { ToolCall } from '../types/provider';
 
-/**
- * Parse tool calls from various formats
- */
 export class ToolCallParser {
-  /**
-   * Parse XML tool calls
-   */
   static parseXML(content: string): ToolCall[] {
     const toolCalls: ToolCall[] = [];
 
-    // Match <tool_call> tags
     const regex = /<tool_call[^>]*>(.*?)<\/tool_call>/gs;
     const matches = content.matchAll(regex);
 
     for (const match of matches) {
       const toolContent = match[1];
 
-      // Extract name (handle <name>, <tool_name>, or <tool>)
       const nameMatch = /<(?:name|tool_name|tool)>(.*?)<\/(?:name|tool_name|tool)>/.exec(toolContent);
       let name = nameMatch ? nameMatch[1].trim() : '';
       let args = {};
 
-      // If no name tag found, try to parse as JSON or treat as plain text
       if (!name) {
         try {
-          // Try to parse the whole content as JSON
           const cleanJson = toolContent.replace(/```json\s*|\s*```/g, '').trim();
           const parsed = JSON.parse(cleanJson);
           if (parsed.name) {
@@ -33,7 +23,6 @@ export class ToolCallParser {
             args = parsed.arguments || parsed.args || {};
           }
         } catch (e) {
-          // Not JSON, treat as plain text if no other tags present
           if (!toolContent.includes('<')) {
             name = toolContent.trim();
           }
@@ -42,7 +31,6 @@ export class ToolCallParser {
 
       if (!name) continue;
 
-      // Extract arguments if not already parsed from JSON
       if (Object.keys(args).length === 0) {
         const argsMatch = /<(?:arguments|args)>(.*?)<\/(?:arguments|args)>/s.exec(toolContent);
         const argsStr = argsMatch ? argsMatch[1].trim() : '{}';
@@ -67,18 +55,13 @@ export class ToolCallParser {
     return toolCalls;
   }
 
-  /**
-   * Parse JSON tool calls
-   */
   static parseJSON(content: string): ToolCall[] {
     try {
-      // Try to extract JSON from markdown code blocks
       const jsonMatch = /```json\s*([\s\S]*?)\s*```/.exec(content);
       const jsonStr = jsonMatch ? jsonMatch[1] : content;
 
       const parsed = JSON.parse(jsonStr);
 
-      // Handle array of tool calls
       if (Array.isArray(parsed)) {
         return parsed.map((call) => ({
           id: call.id || `toolcall_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -87,7 +70,6 @@ export class ToolCallParser {
         }));
       }
 
-      // Handle single tool call
       if (parsed.name) {
         return [
           {
@@ -104,13 +86,34 @@ export class ToolCallParser {
     }
   }
 
-  /**
-   * Auto-detect and parse tool calls
-   */
+  static parseRawFormat(content: string): ToolCall[] {
+    const toolCalls: ToolCall[] = [];
+    // Format: <|start|>assistant<|channel|>commentary to=functions.TOOL_NAME <|constrain|>json<|message|>ARGUMENTS<|call|>
+    const regex = /to=functions\.([^\s]+)\s+<\|constrain\|>json<\|message\|>(.*?)<\|call\|>/g;
+    const matches = content.matchAll(regex);
+
+    for (const match of matches) {
+      const name = match[1];
+      const argsStr = match[2];
+
+      try {
+        const args = JSON.parse(argsStr);
+        toolCalls.push({
+          id: `toolcall_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name,
+          arguments: args,
+        });
+      } catch (e) {
+        console.warn('[ToolCallParser] Failed to parse raw tool arguments:', argsStr);
+      }
+    }
+
+    return toolCalls;
+  }
+
   static parse(content: string): ToolCall[] {
     if (!content) return [];
 
-    // Try XML first
     if (content.includes('<tool_call>')) {
       const xmlCalls = this.parseXML(content);
       if (xmlCalls.length > 0) {
@@ -118,7 +121,6 @@ export class ToolCallParser {
       }
     }
 
-    // Try JSON
     if (content.includes('{') && (content.includes('"name"') || content.includes('```json'))) {
       const jsonCalls = this.parseJSON(content);
       if (jsonCalls.length > 0) {
@@ -126,12 +128,17 @@ export class ToolCallParser {
       }
     }
 
+    // Check for raw format
+    if (content.includes('to=functions.')) {
+      const rawCalls = this.parseRawFormat(content);
+      if (rawCalls.length > 0) {
+        return rawCalls;
+      }
+    }
+
     return [];
   }
 
-  /**
-   * Check if content contains tool calls
-   */
   static hasToolCalls(content: string): boolean {
     if (!content) return false;
     return content.includes('<tool_call>') || (content.includes('{') && content.includes('"name"'));

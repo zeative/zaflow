@@ -1,18 +1,13 @@
 import type Groq from 'groq-sdk';
-import type { Provider, ProviderMessage, ProviderResponse } from '../types/provider';
-import type { ModelConfig } from '../types/core';
-import type { Tool } from '../types/tool';
-import { BaseProvider } from '../core/Provider';
+import { BaseProvider } from '../core/entities/Provider';
 import { ResponseFormatter } from '../protocol/ResponseFormatter';
 import { ToolCallParser } from '../protocol/ToolCallParser';
-import { LazyLoader } from '../utils/LazyLoader';
 import { getTextContent } from '../types/content';
+import { ModelConfig } from '../types/core';
+import { Provider, ProviderMessage, ProviderResponse } from '../types/provider';
+import { Tool } from '../types/tool';
+import { LazyLoader } from '../utils/system/LazyLoader';
 
-/**
- * Groq provider with dual protocol support
- * - Native tool calling for compatible models
- * - XML protocol for incompatible models
- */
 export class GroqProvider extends BaseProvider implements Provider {
   name = 'groq';
   type = 'groq';
@@ -20,7 +15,6 @@ export class GroqProvider extends BaseProvider implements Provider {
   declare defaultModel?: string;
   readonly supportsNativeTools = true;
 
-  // Models that support native tool calling
   private static NATIVE_TOOL_CALLING_MODELS = [
     'llama-3.1-70b-versatile',
     'llama-3.1-8b-instant',
@@ -33,7 +27,6 @@ export class GroqProvider extends BaseProvider implements Provider {
   constructor(apiKey: string, defaultModel?: string) {
     super();
     const mod = LazyLoader.load<any>('groq-sdk', 'Groq');
-    // Handle both: module.default (ESM) and module itself (CJS)
     const GroqClass = mod.default || mod.Groq || mod;
     this.client = new GroqClass({ apiKey });
     this.defaultModel = defaultModel || 'moonshotai/kimi-k2-instruct-0905';
@@ -42,7 +35,6 @@ export class GroqProvider extends BaseProvider implements Provider {
   async chat(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): Promise<ProviderResponse> {
     const supportsNative = this.supportsNativeToolCalling();
 
-    // Convert messages to Groq format
     let groqMessages = messages.map((msg) => ({
       role: msg.role === 'tool' ? ('tool' as const) : msg.role,
       content: msg.role === 'system' || msg.role === 'tool' ? getTextContent(msg.content) : msg.content,
@@ -71,29 +63,23 @@ export class GroqProvider extends BaseProvider implements Provider {
       stop: config.stopSequences,
     };
 
-    // DUAL PROTOCOL STRATEGY
     if (tools && tools.length > 0) {
       if (supportsNative) {
-        // Strategy 1: Native tool calling (preferred)
         options.tools = ResponseFormatter.formatToolsAsJSON(tools);
-        console.log(`[GROQ] 🔧 NATIVE protocol - ${tools.length} tools`);
       } else {
-        // Strategy 2: XML Protocol (universal fallback)
-        console.log(`[GROQ] 📝 XML protocol - ${tools.length} tools (model=${this.defaultModel})`);
-
         const toolInstructions = ResponseFormatter.generateToolInstructions(tools, 'xml');
+        const enforcement = `\n\n${toolInstructions}\n\nUse the XML tool_call format if tool usage is required.`;
 
-        // Inject into system prompt with STRONG enforcement
         if (groqMessages[0]?.role === 'system') {
           groqMessages[0] = {
             ...groqMessages[0],
-            content: `${groqMessages[0].content}\n\n${toolInstructions}\n\n🚨 CRITICAL: When the user asks a question that requires tool usage, you MUST call the tools using the XML format shown above. Do NOT just describe what you would do - ACTUALLY output the XML tool_call format. This is mandatory.`,
+            content: `${groqMessages[0].content}${enforcement}`,
           };
         } else {
           groqMessages = [
             {
               role: 'system',
-              content: `${toolInstructions}\n\n🚨 CRITICAL: When the user asks a question that requires tool usage, you MUST call the tools using the XML format shown above. Do NOT just describe what you would do - ACTUALLY output the XML tool_call format. This is mandatory.`,
+              content: enforcement,
               tool_calls: [],
               tool_call_id: '',
               name: '',
@@ -105,28 +91,18 @@ export class GroqProvider extends BaseProvider implements Provider {
     }
 
     const completion = await this.client.chat.completions.create(options);
-
     const choice = completion.choices[0];
     const message = choice.message;
 
-    console.log('[GROQ] 📊 finish_reason:', choice.finish_reason);
-    console.log('[GROQ] 🎯 has native tool_calls:', !!message.tool_calls);
-
-    // Parse tool calls - try native first, then XML fallback
     let toolCalls = message.tool_calls?.map((tc) => ({
       id: tc.id,
       name: tc.function.name,
       arguments: JSON.parse(tc.function.arguments),
     }));
 
-    // XML Fallback: If no native tool calls but we sent tools, parse from content
     if (!toolCalls && tools && tools.length > 0 && message.content) {
       if (ToolCallParser.hasToolCalls(message.content)) {
         toolCalls = ToolCallParser.parse(message.content);
-        console.log(`[GROQ] ✅ Parsed ${toolCalls.length} tool calls from XML`);
-      } else {
-        console.log('[GROQ] ⚠️  No tool calls detected (neither native nor XML)');
-        console.log('[GROQ] 📄 Response preview:', message.content.substring(0, 200));
       }
     }
 
@@ -145,7 +121,6 @@ export class GroqProvider extends BaseProvider implements Provider {
   }
 
   async *stream(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): AsyncIterableIterator<string> {
-    // Convert messages
     const groqMessages = messages.map((msg) => ({
       role: msg.role === 'tool' ? ('tool' as const) : msg.role,
       content: msg.role === 'system' || msg.role === 'tool' ? getTextContent(msg.content) : msg.content,
@@ -175,9 +150,6 @@ export class GroqProvider extends BaseProvider implements Provider {
     }
   }
 
-  /**
-   * Check if current model supports native tool calling
-   */
   private supportsNativeToolCalling(): boolean {
     if (!this.defaultModel) return false;
     return GroqProvider.NATIVE_TOOL_CALLING_MODELS.some((model) => this.defaultModel?.includes(model));

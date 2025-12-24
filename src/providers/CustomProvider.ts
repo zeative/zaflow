@@ -1,12 +1,8 @@
-import type { Provider, ProviderAdapter, ProviderDefinition } from '../types/provider';
-import { BaseProvider } from '../core/Provider';
-import type { ProviderMessage, ProviderResponse } from '../types/provider';
-import type { ModelConfig } from '../types/core';
-import type { Tool } from '../types/tool';
+import { BaseProvider } from '../core/entities/Provider';
+import { ModelConfig } from '../types/core';
+import { Provider, ProviderAdapter, ProviderDefinition, ProviderMessage, ProviderResponse } from '../types/provider';
+import { Tool } from '../types/tool';
 
-/**
- * Custom provider implementation using adapter function
- */
 export class CustomProvider extends BaseProvider implements Provider {
   name: string;
   type = 'custom';
@@ -34,7 +30,6 @@ export class CustomProvider extends BaseProvider implements Provider {
   }
 
   async *stream(messages: ProviderMessage[], config: ModelConfig, tools?: Tool[]): AsyncIterableIterator<string> {
-    // Custom adapters don't support streaming by default
-    throw new Error('Streaming is not supported for custom providers. Please implement streaming in your adapter or use the run() method instead.');
+    throw new Error('Streaming is not supported for custom providers.');
   }
 }

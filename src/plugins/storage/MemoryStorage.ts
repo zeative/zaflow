@@ -1,8 +1,5 @@
 import type { StoragePlugin } from '../../types/storage';
 
-/**
- * In-memory storage with TTL support
- */
 export class MemoryStorage implements StoragePlugin {
   name = 'memory';
   private store: Map<string, { value: any; expiry?: number }> = new Map();
@@ -14,7 +11,6 @@ export class MemoryStorage implements StoragePlugin {
       return null;
     }
 
-    // Check expiry
     if (item.expiry && Date.now() > item.expiry) {
       this.store.delete(key);
       return null;
@@ -48,7 +44,6 @@ export class MemoryStorage implements StoragePlugin {
       return keys;
     }
 
-    // Simple pattern matching (supports * wildcard)
     const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
     return keys.filter((key) => regex.test(key));
   }

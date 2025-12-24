@@ -1,14 +1,7 @@
 import type { Tool } from '../types/tool';
 import type { Agent } from '../types/agent';
 
-/**
- * Agent delegation protocol formatter
- * XML format for delegating tasks to agents
- */
 export class AgentDelegationFormatter {
-  /**
-   * Format agents as XML for prompt injection
-   */
   static formatAgentsAsXML(agents: Agent[]): string {
     let xml = '<available_agents>\n';
 
@@ -21,9 +14,6 @@ export class AgentDelegationFormatter {
     return xml;
   }
 
-  /**
-   * Generate agent delegation instructions
-   */
   static generateAgentInstructions(agents: Agent[], tools?: Tool[]): string {
     const agentXML = this.formatAgentsAsXML(agents);
 
@@ -80,9 +70,6 @@ ${agentXML}
     return instructions;
   }
 
-  /**
-   * Parse agent delegation from XML in content
-   */
   static parseAgentCalls(content: string): Array<{ name: string; task: string }> {
     if (!content) return [];
     const calls: Array<{ name: string; task: string }> = [];
@@ -93,7 +80,7 @@ ${agentXML}
     for (const match of matches) {
       const callContent = match[1];
 
-      const nameMatch = /<name>(.*?)<\/name>/.exec(callContent);
+      const nameMatch = /<name>([^<]+)<\/name>/s.exec(callContent);
       const taskMatch = /<task>(.*?)<\/task>/s.exec(callContent);
 
       if (nameMatch && taskMatch) {
@@ -107,9 +94,6 @@ ${agentXML}
     return calls;
   }
 
-  /**
-   * Check if content contains agent calls
-   */
   static hasAgentCalls(content: string): boolean {
     if (!content) return false;
     return content.includes('<agent_call>');

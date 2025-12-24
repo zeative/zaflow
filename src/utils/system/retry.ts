@@ -1,9 +1,6 @@
 import pRetry from 'p-retry';
-import type { RetryConfig } from '../types/optimization';
+import { RetryConfig } from '../../types/optimization';
 
-/**
- * Default retry configuration
- */
 const DEFAULT_RETRY_CONFIG: Required<Omit<RetryConfig, 'onRetry'>> = {
   maxAttempts: 3,
   initialDelay: 1000,
@@ -11,9 +8,6 @@ const DEFAULT_RETRY_CONFIG: Required<Omit<RetryConfig, 'onRetry'>> = {
   maxDelay: 10000,
 };
 
-/**
- * Retry a function with exponential backoff
- */
 export async function retryWithBackoff<T>(fn: () => Promise<T>, config?: RetryConfig): Promise<T> {
   const finalConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
 

@@ -1,12 +1,6 @@
 import type { Tool } from '../types/tool';
 
-/**
- * Format tools for different providers
- */
 export class ResponseFormatter {
-  /**
-   * Format tools as XML (compact format for models without native tool calling)
-   */
   static formatToolsAsXML(tools: Tool[]): string {
     let xml = '<tools>\n';
 
@@ -33,9 +27,6 @@ export class ResponseFormatter {
     return xml;
   }
 
-  /**
-   * Helper to format parameter type information recursively
-   */
   private static formatParamType(schema: any): string {
     if (!schema) return 'any';
 
@@ -58,9 +49,6 @@ export class ResponseFormatter {
     return schema.type || 'any';
   }
 
-  /**
-   * Format tools as JSON (for native tool calling)
-   */
   static formatToolsAsJSON(tools: Tool[]): any[] {
     return tools.map((tool) => ({
       type: 'function',
@@ -72,9 +60,6 @@ export class ResponseFormatter {
     }));
   }
 
-  /**
-   * Generate tool calling instructions for system prompt
-   */
   static generateToolInstructions(tools: Tool[], format: 'xml' | 'json' = 'xml'): string {
     if (format === 'xml') {
       return `You have access to the following tools:

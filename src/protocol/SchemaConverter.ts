@@ -1,18 +1,11 @@
 import { z } from 'zod';
 
-/**
- * Convert Zod schema to JSON Schema
- * Uses Zod 4 native toJSONSchema
- */
 export function zodToJsonSchema(schema: z.ZodSchema) {
   const schemas = z.toJSONSchema(schema);
   delete schemas.$schema;
   return schemas;
 }
 
-/**
- * Convert JSON Schema to XML tool format (for compact representation)
- */
 export function jsonSchemaToXML(name: string, description: string, schema: any): string {
   const params = schema.properties || {};
   const required = schema.required || [];
